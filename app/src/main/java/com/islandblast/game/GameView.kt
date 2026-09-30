@@ -3,26 +3,33 @@ package com.islandblast.game
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
-import android.graphics.Shader
+import android.os.Build
 import android.os.SystemClock
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import com.islandblast.game.model.Level5Game
 import com.islandblast.game.render.Assets
 import com.islandblast.game.render.Effects
 import com.islandblast.game.render.Renderer
 import kotlin.math.hypot
+import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Hosts Level 5. The reference's 1024x1536 frame is scaled uniformly to fit the
- * screen (layout never stretches); extra height on tall phones shows a soft,
- * blurred continuation of the temple instead of black bars.
+ * Hosts Level 5 full screen, edge to edge.
+ *
+ * The approved screen (the "stage") is scaled uniformly, never stretched:
+ *  - as large as possible so the scene fills the whole display, but
+ *  - never so large that any HUD element (pause, sign, timer, Goal, combo, score,
+ *    coins) leaves the safe area (camera cutout, status/navigation bars, rounded
+ *    corners).
+ * Whatever the stage does not cover is filled by the same scene painted past its
+ * edges (background_ext), so there are no bars or borders on any phone shape.
  */
 @SuppressLint("ViewConstructor")
 class GameView(context: Context, private val assets: Assets) : View(context), Choreographer.FrameCallback {
@@ -36,8 +43,9 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
     private var offY = 0f
     private val stage = RectF()
     private val bgPaint = Paint(Paint.FILTER_BITMAP_FLAG)
-    private val bandPaint = Paint().apply { color = 0xFF000000.toInt() }
-    private val bandShade = Paint()
+
+    /** Safe-area insets in view pixels (left, top, right, bottom). */
+    private val safe = IntArray(4)
 
     private var lastNanos = 0L
     private var running = false
@@ -60,6 +68,46 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
 
     /** Maps a stage point (reference pixels) to view pixels. */
     fun stageToView(x: Float, y: Float) = PointF(offX + x * scale, offY + y * scale)
+
+    /** The stage's rectangle in view pixels (may extend past the view). */
+    val stageRect: RectF get() = RectF(stage)
+
+    /** The area the HUD must stay inside, in view pixels. */
+    val safeRect: RectF
+        get() = RectF(safe[0] + pad(), safe[1] + pad(), width - safe[2] - pad(), height - safe[3] - pad())
+
+    /** Test hook: pretend the device reports these insets (e.g. a camera cutout). */
+    fun setSafeInsetsForTest(l: Int, t: Int, r: Int, b: Int) {
+        safe[0] = l; safe[1] = t; safe[2] = r; safe[3] = b
+        fitStage()
+        invalidate()
+    }
+
+    private fun pad() = 6f * resources.displayMetrics.density
+
+    override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        var l = 0; var t = 0; var r = 0; var b = 0
+        insets.displayCutout?.let {
+            l = it.safeInsetLeft; t = it.safeInsetTop; r = it.safeInsetRight; b = it.safeInsetBottom
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            // Bars are hidden while playing; if the user swipes them in, keep clear of them.
+            val vis = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            l = maxOf(l, vis.left); t = maxOf(t, vis.top); r = maxOf(r, vis.right); b = maxOf(b, vis.bottom)
+            // Rounded corners: keep the HUD a little further in on phones that report them.
+            if (Build.VERSION.SDK_INT >= 31) {
+                val tl = insets.getRoundedCorner(android.view.RoundedCorner.POSITION_TOP_LEFT)?.radius ?: 0
+                val bl = insets.getRoundedCorner(android.view.RoundedCorner.POSITION_BOTTOM_LEFT)?.radius ?: 0
+                val corner = (maxOf(tl, bl) * 0.3f).toInt()
+                l = maxOf(l, corner); r = maxOf(r, corner)
+                t = maxOf(t, corner); b = maxOf(b, corner)
+            }
+        }
+        safe[0] = l; safe[1] = t; safe[2] = r; safe[3] = b
+        fitStage()
+        invalidate()
+        return insets
+    }
 
     // Touch state: a short tap on the ball switches colour, any drag aims, release shoots.
     private var downX = 0f
@@ -95,45 +143,50 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
         Choreographer.getInstance().postFrameCallback(this)
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) = fitStage()
+
+    private fun fitStage() {
         val s = assets.spec
-        scale = min(w / s.stageW, h / s.stageH)
-        offX = (w - s.stageW * scale) / 2f
-        offY = (h - s.stageH * scale) / 2f
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
+        val hud = s.hud.extent
+        val safeArea = safeRect
+        // Cover the screen, unless that would push the HUD out of the safe area.
+        val cover = max(w / s.stageW, h / s.stageH)
+        val fitHud = min(safeArea.width() / hud.w, safeArea.height() / hud.h)
+        scale = min(cover, fitHud)
+        offX = place((w - s.stageW * scale) / 2f, hud.l, hud.r, safeArea.left, safeArea.right)
+        offY = place((h - s.stageH * scale) / 2f, hud.t, hud.b, safeArea.top, safeArea.bottom)
         stage.set(offX, offY, offX + s.stageW * scale, offY + s.stageH * scale)
     }
 
+    /** Offset nearest [centred] that keeps stage span [a, b] inside screen span [lo, hi]. */
+    private fun place(centred: Float, a: Float, b: Float, lo: Float, hi: Float): Float {
+        val min = lo - a * scale
+        val max = hi - b * scale
+        return if (min <= max) centred.coerceIn(min, max) else (min + max) / 2f
+    }
+
     override fun onDraw(canvas: Canvas) {
-        if (stage.top > 0.5f) drawBands(canvas)
-        if (stage.left > 0.5f) {
-            canvas.drawRect(0f, 0f, stage.left, height.toFloat(), bandPaint)
-            canvas.drawRect(stage.right, 0f, width.toFloat(), height.toFloat(), bandPaint)
+        val s = assets.spec
+        val ext = RectF(
+            stage.left - s.extMarginX * scale, stage.top - s.extMarginY * scale,
+            stage.right + s.extMarginX * scale, stage.bottom + s.extMarginY * scale,
+        )
+        if (ext.left > 0f || ext.top > 0f || ext.right < width || ext.bottom < height) {
+            // Only on extreme shapes: a soft blur of the scene behind the painted margins.
+            val cover = max(width / ext.width(), height / ext.height())
+            val cw = ext.width() * cover
+            val ch = ext.height() * cover
+            canvas.drawBitmap(assets.backgroundBlur, null,
+                RectF((width - cw) / 2f, (height - ch) / 2f, (width + cw) / 2f, (height + ch) / 2f), bgPaint)
         }
         canvas.save()
         canvas.translate(offX, offY)
         canvas.scale(scale, scale)
-        canvas.clipRect(0f, 0f, assets.spec.stageW, assets.spec.stageH)
         renderer.draw(canvas, game, effects)
         canvas.restore()
-    }
-
-    /** Tall screens: mirror a blur of the scene's top/bottom edge into the spare height. */
-    private fun drawBands(canvas: Canvas) {
-        val topH = stage.top
-        val bottomH = height - stage.bottom
-        canvas.save()
-        canvas.scale(1f, -1f, 0f, stage.top)
-        canvas.drawBitmap(assets.bandTop, null, RectF(stage.left, stage.top, stage.right, stage.top + topH), bgPaint)
-        canvas.restore()
-        canvas.save()
-        canvas.scale(1f, -1f, 0f, stage.bottom)
-        canvas.drawBitmap(assets.bandBottom, null, RectF(stage.left, stage.bottom - bottomH, stage.right, stage.bottom), bgPaint)
-        canvas.restore()
-        bandShade.shader = LinearGradient(0f, 0f, 0f, stage.top, 0xAA000000.toInt(), 0x22000000, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, width.toFloat(), stage.top, bandShade)
-        bandShade.shader = LinearGradient(0f, stage.bottom, 0f, height.toFloat(), 0x22000000, 0xAA000000.toInt(),
-            Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, stage.bottom, width.toFloat(), height.toFloat(), bandShade)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -153,7 +206,8 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
                     game.paused = false
                     return true
                 }
-                if (PAUSE.contains(x, y)) {
+                val p = s.hud.pause
+                if (x in p.l - 10f..p.r + 10f && y in p.t - 10f..p.b + 10f) {
                     game.paused = true
                     return true
                 }
@@ -193,8 +247,6 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
     }
 
     companion object {
-        /** The painted pause button, in stage units. */
-        private val PAUSE = RectF(24f, 18f, 172f, 156f)
         private const val RESTART_GUARD_MS = 700L
     }
 }

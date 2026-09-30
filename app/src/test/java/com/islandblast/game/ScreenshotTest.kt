@@ -1,7 +1,9 @@
 package com.islandblast.game
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import com.islandblast.game.model.GameEvent
 import com.islandblast.game.model.Level5Game
 import com.islandblast.game.model.Phase
@@ -14,10 +16,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.abs
 
 /**
- * Renders the real Level 5 renderer off-screen (Robolectric native graphics) so the
- * frames can be compared with the approved reference and the colour-shift storyboard.
+ * Renders the real Level 5 renderer off-screen (Robolectric native graphics) at the
+ * approved reference's own size, so frames can be compared with it pixel for pixel.
  * Output: PNG files in app/build/level5-shots/
  */
 @RunWith(RobolectricTestRunner::class)
@@ -25,14 +28,17 @@ import java.io.File
 @Config(sdk = [34])
 class ScreenshotTest {
     private val assets get() = TestLevel.assets
-    private val out = File(System.getProperty("level5.repo") ?: ".", "app/build/level5-shots").apply { mkdirs() }
+    private val repo = System.getProperty("level5.repo") ?: "."
+    private val out = File(repo, "app/build/level5-shots").apply { mkdirs() }
+    private val w get() = assets.spec.stageW.toInt()
+    private val h get() = assets.spec.stageH.toInt()
 
     private fun render(game: Level5Game, fx: Effects, renderer: Renderer, name: String): IntArray {
-        val bmp = Bitmap.createBitmap(1024, 1536, Bitmap.Config.ARGB_8888)
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         renderer.draw(Canvas(bmp), game, fx)
-        val px = IntArray(1024 * 1536)
-        bmp.getPixels(px, 0, 1024, 0, 0, 1024, 1536)
-        Png.write(File(out, "$name.png"), 1024, 1536, px)
+        val px = IntArray(w * h)
+        bmp.getPixels(px, 0, w, 0, 0, w, h)
+        Png.write(File(out, "$name.png"), w, h, px)
         return px
     }
 
@@ -40,21 +46,22 @@ class ScreenshotTest {
         TestLevel.run(game, seconds) { fx.consume(it) }
     }
 
+    /** The opening frame must reproduce the approved full-screen design. */
     @Test
     fun openingFrameMatchesTheApprovedScreen() {
         val game = Level5Game(assets.spec)
         val frame = render(game, Effects(assets), Renderer(assets), "frame0")
-        val repo = System.getProperty("level5.repo") ?: "."
-        val ref = android.graphics.BitmapFactory.decodeFile("$repo/design/level5_reference.png")
+        val ref = BitmapFactory.decodeFile("$repo/design/level5_fullscreen_reference.png")
+        val goal = assets.spec.hud.goalText
         var off = 0
         var counted = 0
-        for (y in 0 until 1536) for (x in 0 until 1024) {
-            if (x in 18..242 && y in 160..340) continue // Goal panel, added from the storyboard
-            val a = frame[y * 1024 + x]
+        for (y in 0 until h) for (x in 0 until w) {
+            // The Goal board's text is live (the painted "all! al!" typo is not reproduced).
+            if (x >= goal.l && x < goal.r && y >= goal.t && y < goal.b) continue
+            val a = frame[y * w + x]
             val b = ref.getPixel(x, y)
-            val d = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
-                kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
-                kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+            val d = abs(Color.red(a) - Color.red(b)) + abs(Color.green(a) - Color.green(b)) +
+                abs(Color.blue(a) - Color.blue(b))
             if (d > 30) off++
             counted++
         }
@@ -91,7 +98,6 @@ class ScreenshotTest {
         step(game, fx, 0.6f)
 
         // 4. Next ball: aim at the best target for the loaded colour.
-        // The player may tap the ball to pick another colour if the loaded one has no clear line.
         var aim = TestLevel.bestAim(game)
         var switches = 0
         while (aim == null && switches++ < 4) {
@@ -120,25 +126,6 @@ class ScreenshotTest {
         step(game, fx, 0.7f)
         render(game, fx, r, "stage7_next_ball")
         assertTrue(game.phase == Phase.READY)
-    }
-
-    /** Whole view on a 20:9 phone: the reference frame is fitted, bands show the blurred temple. */
-    @Test
-    fun phoneAspectLetterbox() {
-        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
-        val view = GameView(activity, assets)
-        val w = 1080
-        val h = 2400
-        view.measure(
-            android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
-            android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY),
-        )
-        view.layout(0, 0, w, h)
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        view.draw(Canvas(bmp))
-        val px = IntArray(w * h)
-        bmp.getPixels(px, 0, w, 0, 0, w, h)
-        Png.write(File(out, "phone_1080x2400.png"), w, h, px)
     }
 
     @Test

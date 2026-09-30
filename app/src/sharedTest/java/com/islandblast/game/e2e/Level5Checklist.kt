@@ -201,7 +201,7 @@ class Level5Checklist(private val d: Driver) {
             "score ${game.score}, ${game.stars} stars, +${game.coins} coins, ${game.timerSeconds}s left")
 
         d.waitFor("restart to be allowed", 30f) { d.view.canRestart }
-        val c = d.view.stageToView(512f, 1000f)
+        val c = d.view.stageToView(game.spec.stageW / 2f, game.spec.stageH * 0.6f)
         d.touch(MotionEvent.ACTION_DOWN, c.x, c.y)
         d.touch(MotionEvent.ACTION_UP, c.x, c.y)
         d.waitFor("restart", 30f) { !game.over }

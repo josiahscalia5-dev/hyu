@@ -23,7 +23,8 @@ class Rules(
     val coinsPerBlock: Int = 1,
     val clearBonusPerSecond: Int = 20,
     val starThresholds: IntArray = intArrayOf(1000, 1500, 4000),
-    val ballSpeed: Float = 2100f,
+    /** Multiplies the level's ball speed (arena.ballSpeed). */
+    val ballSpeedScale: Float = 1f,
     val introSeconds: Float = 1.1f,
     val shiftDelay: Float = 0.2f,
     val shiftDuration: Float = 0.42f,
@@ -119,8 +120,12 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
     val over get() = phase == Phase.WON || phase == Phase.LOST
     val canShoot get() = phase == Phase.READY && !paused
 
-    fun depthScale(y: Float): Float =
-        (DEPTH_MIN + (1f - DEPTH_MIN) * (y - DEPTH_TOP) / (spec.ballY - DEPTH_TOP)).coerceIn(DEPTH_MIN, 1f)
+    private val arena = spec.arena
+
+    fun depthScale(y: Float): Float {
+        val min = arena.depthMin
+        return (min + (1f - min) * (y - arena.depthTop) / (spec.ballY - arena.depthTop)).coerceIn(min, 1f)
+    }
 
     fun update(dt: Float) {
         if (paused) return
@@ -208,7 +213,7 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
                 hit = c.block
                 break
             }
-            if (p.dy > 0f && p.y > MISS_Y) break
+            if (p.dy > 0f && p.y > arena.missY) break
         }
         pts += floatArrayOf(p.x, p.y)
         val matches = hit >= 0 && board.blocks[hit].color == color
@@ -231,13 +236,13 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
             p.x += p.dx * h
             p.y += p.dy * h
             p.r = spec.ballRadius * depthScale(p.y)
-            if (p.x - p.r < ARENA_L) {
-                p.x = ARENA_L + p.r; p.dx = abs(p.dx); p.walls++
-            } else if (p.x + p.r > ARENA_R) {
-                p.x = ARENA_R - p.r; p.dx = -abs(p.dx); p.walls++
+            if (p.x - p.r < arena.left) {
+                p.x = arena.left + p.r; p.dx = abs(p.dx); p.walls++
+            } else if (p.x + p.r > arena.right) {
+                p.x = arena.right - p.r; p.dx = -abs(p.dx); p.walls++
             }
-            if (p.y - p.r < ARENA_T) {
-                p.y = ARENA_T + p.r; p.dy = abs(p.dy); p.walls++
+            if (p.y - p.r < arena.top) {
+                p.y = arena.top + p.r; p.dy = abs(p.dy); p.walls++
             }
             val c = firstContact(p)
             if (c != null) return c
@@ -278,7 +283,7 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
     private fun stepBall(dt: Float) {
         shotTime += dt
         val p = Probe(ball.x, ball.y, ball.dx, ball.dy, ball.r)
-        val speed = rules.ballSpeed * (0.5f + 0.5f * depthScale(ball.y))
+        val speed = spec.arena.ballSpeed * rules.ballSpeedScale * (0.5f + 0.5f * depthScale(ball.y))
         // Fixed-size substeps, identical to the aim guide's, so the guide predicts the real shot.
         carry += speed * dt
         while (carry >= SUBSTEP && (phase == Phase.FLYING || phase == Phase.RETURNING)) {
@@ -312,7 +317,7 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
                 }
                 lastBounceBlock = c.block
             }
-            if (phase == Phase.FLYING && ((p.dy > 0f && p.y > MISS_Y) || shotTime > rules.maxShotSeconds)) {
+            if (phase == Phase.FLYING && ((p.dy > 0f && p.y > arena.missY) || shotTime > rules.maxShotSeconds)) {
                 // Missed: the ball rolls back down the path to the launcher.
                 phase = Phase.RETURNING
                 val tx = spec.ballX - p.x
@@ -435,12 +440,6 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
     private fun starsFor(points: Int) = rules.starThresholds.count { points >= it }
 
     companion object {
-        const val ARENA_L = 150f
-        const val ARENA_R = 874f
-        const val ARENA_T = 224f
-        const val MISS_Y = 930f
-        const val DEPTH_TOP = 700f
-        const val DEPTH_MIN = 0.45f
         private const val SUBSTEP = 3f
     }
 }

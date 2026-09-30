@@ -26,18 +26,15 @@ class Assets(private val am: AssetManager) {
 
     private fun perColor(prefix: String) = GameColor.entries.associateWith { bmp("${prefix}_${it.key}.png") }
 
+    /** The temple with every moving part removed, at stage size. */
     val background = bmp("background.png")
 
-    /**
-     * Tiny copies of the plate's top and bottom edges. Drawn stretched and mirrored
-     * into the letterbox bands they continue the scene's colours as a soft blur.
-     */
-    val bandTop: Bitmap = edgeBlur(0)
-    val bandBottom: Bitmap = edgeBlur(background.height - EDGE_ROWS)
+    /** The same scene painted past every edge (spec.extMarginX/Y), so any phone shape is filled. */
+    val backgroundExt = bmp("background_ext.png")
 
-    private fun edgeBlur(y: Int): Bitmap = Bitmap.createScaledBitmap(
-        Bitmap.createScaledBitmap(Bitmap.createBitmap(background, 0, y, background.width, EDGE_ROWS), 64, 12, true),
-        16, 4, true,
+    /** Tiny copy of the extended scene: drawn stretched it is a soft blur for extreme aspect ratios. */
+    val backgroundBlur: Bitmap = Bitmap.createScaledBitmap(
+        Bitmap.createScaledBitmap(backgroundExt, 60, 106, true), 20, 35, true,
     )
     val blocksRef = bmp("blocks_ref.png")
     val blocks = perColor("blocks")
@@ -59,6 +56,5 @@ class Assets(private val am: AssetManager) {
 
     companion object {
         const val DIR = "level5"
-        private const val EDGE_ROWS = 220
     }
 }

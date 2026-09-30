@@ -14,6 +14,7 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(__file__))
 import build_blocks  # noqa: E402
 import build_plate  # noqa: E402
+import fit_text  # noqa: E402
 import layout  # noqa: E402
 
 REPO = build_blocks.REPO
@@ -21,36 +22,24 @@ OUT = os.path.join(REPO, "app", "src", "main", "assets", "level5")
 
 # Gameplay colour cycle. Blocks next to a cleared group step one place right.
 CYCLE = ["cyan", "violet", "magenta", "red", "yellow"]
-# The reference paints a few in-between hues; the game reads them as these colours.
-LOGICAL = {"cyan": "cyan", "violet": "violet", "orchid": "violet", "magenta": "magenta",
-           "pink": "red", "red": "red", "yellow": "yellow"}
-# Blocks whose painted hue sits between two game colours (b07 is crimson-pink).
-AMBIGUOUS = {"b03", "b04", "b07", "b08"}
-# Pools of clean, canonical blocks used to learn each colour's shading ramp.
-RAMP_POOL = {
-    "cyan": ["b16", "b19", "b30", "b31"],
-    "violet": ["b01", "b02", "b11", "b12", "b21", "b22", "b29"],
-    "magenta": ["b06", "b28"],
-    "red": ["b09", "b10"],
-    "yellow": ["b05", "b13", "b14", "b23", "b24", "b25", "b26", "b27"],
-}
+LOGICAL = {c: c for c in CYCLE}
+AMBIGUOUS = layout.AMBIGUOUS
+RAMP_POOL = layout.RAMP_POOL
 # Display colour for UI accents (goal swatches, glows, tints), sampled from the art.
 SWATCH = {"cyan": "#10A8FE", "violet": "#A044FD", "magenta": "#F81EF6", "red": "#F42238",
           "yellow": "#FDD21A"}
 
-BALL_CENTER, BALL_R = (515, 1395), 63
+BALL_CENTER, BALL_R = layout.BALL_CENTER, layout.BALL_R
 BALL_HUE = {"cyan": None, "violet": 135, "magenta": 150, "red": 178, "yellow": 22}
-BURST_CENTER = (515, 768)
-# Boxes around painted gems thrown by the burst; reused as hit shards.
-GEM_BOXES = [(341, 625, 389, 672), (416, 696, 460, 734), (398, 728, 459, 765),
-             (658, 585, 702, 632), (651, 625, 685, 669), (811, 585, 849, 625)]
-FLASH_CENTER, FLASH_R = (518, 768), 95
-# Aim chevron traced from the reference: 36x42 at the ball, apex, shoulders, V notch.
-CHEVRON_POLY = [(0.5, 0.0), (1.0, 0.32), (1.0, 1.0), (0.5, 0.71), (0.0, 1.0), (0.0, 0.32)]
-CHEVRON_W, CHEVRON_H = 36, 42
+BURST_CENTER = layout.BURST_CENTER
+FLASH_CENTER, FLASH_R = layout.BURST_CENTER, layout.BURST_R
+
+# Aim chevron traced from the reference (46x45): apex, shoulders, V notch, thin tips.
+CHEVRON_POLY = [(0.5, 0.0), (1.0, 0.44), (1.0, 1.0), (0.5, 0.64), (0.0, 1.0), (0.0, 0.44)]
+CHEVRON_W, CHEVRON_H = 46, 45
 CHEVRON_GLOW = {"cyan": (96, 120, 255), "violet": (176, 92, 255), "magenta": (255, 84, 238),
                 "red": (255, 72, 84), "yellow": (255, 204, 48)}
-STAR_BOXES = [(343, 106, 444, 202), (446, 106, 547, 202), (554, 106, 652, 202)]
+STAR_BOXES = layout.STAR_BOXES
 
 
 def lum(a):
@@ -164,11 +153,11 @@ def render_chevron(glow_rgb, scale=2, pad=14):
     poly = np.array([(P + x * w, P + y * h) for x, y in CHEVRON_POLY], np.int32)
     core = np.zeros((h + 2 * P, w + 2 * P), np.uint8)
     cv2.fillPoly(core, [poly], 255, lineType=cv2.LINE_AA)
-    glow = cv2.GaussianBlur(cv2.dilate(core, np.ones((3 * ss + 1, 3 * ss + 1), np.uint8)).astype(np.float32),
-                            (0, 0), 4.5 * ss)
+    glow = cv2.GaussianBlur(cv2.dilate(core, np.ones((2 * ss + 1, 2 * ss + 1), np.uint8)).astype(np.float32),
+                            (0, 0), 3.0 * ss)
     size = (core.shape[1] // 4, core.shape[0] // 4)
     core = cv2.resize(core.astype(np.float32), size, interpolation=cv2.INTER_AREA) / 255.0
-    glow = np.clip(cv2.resize(glow, size, interpolation=cv2.INTER_AREA) / 255.0 * 1.9, 0, 1)
+    glow = np.clip(cv2.resize(glow, size, interpolation=cv2.INTER_AREA) / 255.0 * 1.5, 0, 1)
     col = np.array(glow_rgb, np.float32) / 255.0
     a = np.clip(core + glow * 0.95 * (1 - core), 0, 1)
     rgb = (core[..., None] * 1.0 + (1 - core[..., None]) * col * glow[..., None] * 0.95) / np.maximum(a, 1e-4)[..., None]
@@ -331,7 +320,7 @@ def build(work):
 
     # ---- frame-0 effects ---------------------------------------------------
     zone = cv2.dilate(np.array(Image.open(os.path.join(work, "mask_formation.png"))), np.ones((15, 15), np.uint8))
-    for bx in build_plate.HUD_TEXT_BOXES:
+    for bx in layout.GOLD_TEXT_BOXES:
         cv2.rectangle(zone, bx[:2], bx[2:], 0, -1)
     r16, c16 = ref.astype(np.int16), comp.astype(np.int16)
     diff = np.abs(r16 - c16).sum(axis=2)
@@ -347,7 +336,7 @@ def build(work):
         return np.clip(np.maximum(s, cv2.erode(m, np.ones((3, 3), np.uint8))), 0, 255)
 
     burst_zone = np.zeros((h, w), np.uint8)
-    cv2.ellipse(burst_zone, BURST_CENTER, (118, 104), 0, 0, 360, 255, -1)
+    cv2.ellipse(burst_zone, BURST_CENTER, (FLASH_R, int(FLASH_R * 0.88)), 0, 0, 360, 255, -1)
     fx_a = soft(eff)
     save_rgba(os.path.join(OUT, "fx_intro.png"), ref[ay0:ay1, ax0:ax1], fx_a[ay0:ay1, ax0:ax1])
     save_rgba(os.path.join(OUT, "fx_intro_bg.png"), ref[ay0:ay1, ax0:ax1], soft(resid)[ay0:ay1, ax0:ax1])
@@ -390,14 +379,15 @@ def build(work):
         Image.fromarray(img).save(os.path.join(OUT, f"burst_{c}.png"), optimize=True)
 
     # ---- shard sprites: the painted gems, recoloured to each game colour ----
-    tight = ((diff > 70) & (zone > 0)).astype(np.uint8)
+    hsv_ref = cv2.cvtColor(ref, cv2.COLOR_RGB2HSV)
     shard_meta = []
-    for k, (l, t, r, b) in enumerate(GEM_BOXES):
-        n2, lab2, st2, _ = cv2.connectedComponentsWithStats(tight[t:b, l:r], 8)
-        if n2 < 2:
-            continue
-        i = 1 + int(np.argmax(st2[1:, 4]))
-        m = (lab2 == i).astype(np.uint8) * 255
+    for (l, t, r, b), (sx, sy) in layout.GEMS:
+        h0 = int(hsv_ref[sy, sx, 0])
+        sub = hsv_ref[t:b, l:r]
+        cand = ((hue_dist(sub[..., 0], h0) <= 16) & (sub[..., 1] > 90) & (sub[..., 2] > 70)) | (sub[..., 2] > 235)
+        n2, lab2 = cv2.connectedComponents(cand.astype(np.uint8), 8)
+        m = (lab2 == lab2[sy - t, sx - l]).astype(np.uint8) * 255
+        m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
         ff = m.copy()
         cv2.floodFill(ff, np.zeros((m.shape[0] + 2, m.shape[1] + 2), np.uint8), (0, 0), 255)
         m = cv2.GaussianBlur(m | cv2.bitwise_not(ff), (0, 0), 0.7)
@@ -417,7 +407,7 @@ def build(work):
     body_a = np.clip((BALL_R + 0.5 - d) * 255, 0, 255)
     halo = np.clip(ref[box[1]:box[3], box[0]:box[2]].astype(np.int16)
                    - plate[box[1]:box[3], box[0]:box[2]].astype(np.int16), 0, 255).astype(np.float32)
-    strip = (np.abs(xx[box[1]:box[3], box[0]:box[2]] - cx) < 24) & (yy[box[1]:box[3], box[0]:box[2]] < cy - BALL_R + 2)
+    strip = (np.abs(xx[box[1]:box[3], box[0]:box[2]] - cx) < 34) & (yy[box[1]:box[3], box[0]:box[2]] < cy - BALL_R + 2)
     halo[strip] *= 0.0  # the aim chevron above the ball is drawn separately
     halo *= np.clip((R - d) / 30.0, 0, 1)[..., None]
     halo[d < BALL_R - 2] = 0
@@ -443,7 +433,8 @@ def build(work):
     Lr = lum(ref)
     core = np.zeros((h, w), np.uint8)
     sat = cv2.cvtColor(ref, cv2.COLOR_RGB2HSV)[..., 1]
-    core[830:1340, 490:540] = (Lr[830:1340, 490:540] > 215) & (sat[830:1340, 490:540] < 60)
+    zl, zt, zr, zb = layout.CHEVRON_ZONE
+    core[zt:zb, zl:zr] = (Lr[zt:zb, zl:zr] > 215) & (sat[zt:zb, zl:zr] < 60)
     n3, lab3, st3, c3 = cv2.connectedComponentsWithStats(core, 8)
     track = []
     for i in range(1, n3):
@@ -475,6 +466,12 @@ def build(work):
         save_rgba(os.path.join(OUT, f"{name}.png"), ref[t:b, l:r], star_mask(ref, bx))
 
     Image.fromarray(plate).save(os.path.join(OUT, "background.png"), optimize=True)
+    ext = np.array(Image.open(os.path.join(work, "plate_ext.png")).convert("RGB"))
+    Image.fromarray(ext).save(os.path.join(OUT, "background_ext.png"), optimize=True)
+
+    text = fit_text.fit_all(ref)
+    for k, v in text.items():
+        print("text", k, v)
 
     spec = {
         "stage": [layout.STAGE_W, layout.STAGE_H],
@@ -492,6 +489,16 @@ def build(work):
         "chevron": {"size": [CHEVRON_W, CHEVRON_H], "pad": 14, "scale": 2, "track": track},
         "flash": {"center": list(FLASH_CENTER), "radius": FLASH_R},
         "stars": [list(b) for b in STAR_BOXES],
+        "backgroundExt": {"margin": [build_plate.EXT_X, build_plate.EXT_Y]},
+        "arena": layout.ARENA,
+        "hud": {
+            "pause": list(layout.PAUSE),
+            "goalText": list(layout.GOAL_TEXT_AREA),
+            "extent": list(layout.HUD_EXTENT),
+            "comboBox": list(layout.GOLD_TEXT_BOXES[0]),
+            "text": {k: {kk: v[kk] for kk in ("size", "x", "y", "angle", "scaleX", "width")}
+                     for k, v in text.items()},
+        },
     }
     with open(os.path.join(OUT, "level5.json"), "w") as f:
         json.dump(spec, f, indent=1)
@@ -499,5 +506,5 @@ def build(work):
 
 
 if __name__ == "__main__":
-    s = build(sys.argv[1] if len(sys.argv) > 1 else "/tmp/level5_work")
+    s = build(sys.argv[1] if len(sys.argv) > 1 else "/tmp/level5_fs")
     print(len(s["introPieces"]), "intro pieces;", len(s["shards"]), "shard sprites")

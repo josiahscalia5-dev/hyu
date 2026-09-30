@@ -65,8 +65,12 @@ class Effects(private val assets: Assets, seed: Int = 5) {
                 val s = game.spec
                 rings += Ring(s.ballX, s.ballY, s.ballRadius * 1.35f, e.color.swatch, now, 0.3f, 7f)
             }
-            is GameEvent.Won -> repeat(40) {
-                spark(512f + rnd.nextFloat() * 400f - 200f, 600f, GameColor.entries.random(rnd).glow, now, 300f, 900f, 5f)
+            is GameEvent.Won -> {
+                val s = game.spec
+                repeat(40) {
+                    spark(s.stageW / 2f + (rnd.nextFloat() - 0.5f) * s.stageW * 0.45f, s.stageH * 0.4f,
+                        GameColor.entries.random(rnd).glow, now, 300f, 900f, 5f)
+                }
             }
             else -> Unit
         }

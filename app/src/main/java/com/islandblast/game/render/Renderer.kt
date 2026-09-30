@@ -18,6 +18,7 @@ import com.islandblast.game.model.BlockState
 import com.islandblast.game.model.GameColor
 import com.islandblast.game.model.Level5Game
 import com.islandblast.game.model.Phase
+import com.islandblast.game.model.TextSpot
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -68,7 +69,8 @@ class Renderer(private val assets: Assets) {
         val now = game.time
         val dt = (now - lastFrameTime).coerceIn(0f, 0.1f)
         lastFrameTime = now
-        c.drawBitmap(assets.background, 0f, 0f, bmpPaint)
+        // The scene painted past the stage edges fills whatever the phone shows around it.
+        c.drawBitmap(assets.backgroundExt, -spec.extMarginX, -spec.extMarginY, bmpPaint)
         drawBlocks(c, game, now)
         drawIntro(c, now)
         drawShiftMarks(c, game, now)
@@ -432,10 +434,12 @@ class Renderer(private val assets: Assets) {
 
     // ---- HUD -----------------------------------------------------------------------
 
-    private fun drawHud(c: Canvas, game: Level5Game, now: Float, dt: Float) {
-        drawStars(c, game, now)
+    private val hud = spec.hud
 
-        // Timer (white on the dark pill, beside the stopwatch).
+    private fun drawHud(c: Canvas, game: Level5Game, now: Float, dt: Float) {
+        drawStars(c, game)
+
+        // Timer: white on the dark pill beside the stopwatch.
         val secs = game.timerSeconds
         val timer = "%d:%02d".format(secs / 60, secs % 60)
         val bonus = (now - game.lastTimeBonusAt).let { if (it in 0f..0.5f) 1f - it / 0.5f else 0f }
@@ -445,49 +449,50 @@ class Renderer(private val assets: Assets) {
             low -> lerpColor(Color.WHITE, 0xFFFF5A48.toInt(), 0.5f + 0.5f * sin(now * 10f))
             else -> Color.WHITE
         }
-        whiteText(c, timer, TIMER_X, TIMER_Y, TIMER_SIZE * (1f + 0.12f * bonus), timerColor)
+        val t = hud.timer
+        whiteText(c, timer, t.x, t.y, t.size * (1f + 0.1f * bonus), timerColor)
 
         // Score counts up.
         if (shownScore < 0f) shownScore = game.score.toFloat()
         shownScore = approach(shownScore, game.score.toFloat(), dt, 5000f)
-        whiteText(c, "%,d".format(shownScore.roundToInt()), SCORE_X, SCORE_Y, SCORE_SIZE, Color.WHITE)
+        creamText(c, "%,d".format(shownScore.roundToInt()), hud.score)
 
-        // Coins: right-aligned against the coin icon.
+        // Coins: right-aligned against the painted coin.
         if (shownCoins < 0f) shownCoins = game.coins.toFloat()
         shownCoins = approach(shownCoins, game.coins.toFloat(), dt, 40f)
-        goldText(c, "+${shownCoins.roundToInt()}", COINS_RIGHT, COINS_Y, COINS_SIZE, Paint.Align.RIGHT, 0f, rim = false)
+        val k = hud.coins
+        goldText(c, "+${shownCoins.roundToInt()}", k.x + k.width, k.y, k.size, Paint.Align.RIGHT, 0f, rim = false)
 
         // Combo: pops when a clear raises it (timed from the clear, not from drawing).
         if (game.combo >= 2) {
             val kc = ((now - game.lastClearAt) / 0.3f).coerceIn(0f, 1f)
-            val pop = 1f + 0.25f * (1f - smooth(kc))
+            val pop = 1f + 0.22f * (1f - smooth(kc))
+            val cb = hud.comboBox
             c.save()
-            c.scale(pop, pop, COMBO_PIVOT_X, COMBO_PIVOT_Y)
-            goldText(c, "Combo", COMBO_X, COMBO_Y, COMBO_SIZE, Paint.Align.LEFT, COMBO_ANGLE, COMBO_SCALE_X)
+            c.scale(pop, pop, cb.cx, cb.cy)
+            val w = hud.combo
+            goldText(c, "Combo", w.x, w.y, w.size, Paint.Align.LEFT, w.angle, w.scaleX)
             drawComboNumber(c, "x${game.combo}")
             c.restore()
         }
     }
 
     /**
-     * "x9" as painted. Longer numbers ("x10", "x26") stay inside the painted number's
-     * footprint: they grow to the right a little, then shrink, so they never reach
-     * into the block formation below-left.
+     * "x9" as painted. Longer numbers ("x10", "x26") keep the painted number's size
+     * until they would leave the combo box, then shrink to fit, so the combo never
+     * reaches the blocks or the screen edge.
      */
     private fun drawComboNumber(c: Canvas, s: String) {
-        val base = measure("x9", COMBO_N_SIZE)
-        val w = measure(s, COMBO_N_SIZE)
-        if (w <= base) {
-            goldText(c, s, COMBO_N_X, COMBO_N_Y, COMBO_N_SIZE, Paint.Align.CENTER, COMBO_N_ANGLE)
-            return
-        }
-        val fit = min(w, base * 1.2f)
-        val size = COMBO_N_SIZE * fit / w
-        val shift = min(20f, (fit - base) / 2f)
-        goldText(c, s, COMBO_N_X + shift, COMBO_N_Y - (COMBO_N_SIZE - size) * 0.3f, size, Paint.Align.CENTER, COMBO_N_ANGLE)
+        val n = hud.comboNumber
+        val cb = hud.comboBox
+        val centre = n.x + n.width / 2f
+        val w = measure(s, n.size) * n.scaleX
+        val room = 2f * min(centre - cb.l, cb.r - centre)
+        val size = if (w <= room) n.size else n.size * room / w
+        goldText(c, s, centre, n.y - (n.size - size) * 0.3f, size, Paint.Align.CENTER, n.angle, n.scaleX)
     }
 
-    private fun drawStars(c: Canvas, game: Level5Game, now: Float) {
+    private fun drawStars(c: Canvas, game: Level5Game) {
         // The plate already shows two gold stars and one empty; only draw what differs.
         for (i in spec.starBoxes.indices) {
             val want = i < game.stars
@@ -501,24 +506,53 @@ class Renderer(private val assets: Assets) {
         }
     }
 
-    private fun whiteText(c: Canvas, s: String, x: Float, y: Float, size: Float, color: Int) {
+    private fun whiteText(
+        c: Canvas, s: String, x: Float, y: Float, size: Float, color: Int,
+        align: Paint.Align = Paint.Align.LEFT, scaleX: Float = 1f,
+    ) {
         text.typeface = assets.fredoka
         text.textSize = size
-        text.textAlign = Paint.Align.LEFT
+        text.textScaleX = scaleX
+        text.textAlign = align
         text.shader = null
         text.style = Paint.Style.FILL_AND_STROKE
         text.strokeJoin = Paint.Join.ROUND
-        text.strokeWidth = size * 0.1f
+        text.strokeWidth = size * 0.16f
         text.color = 0x99000000.toInt()
-        c.drawText(s, x, y + size * 0.045f, text)
-        text.strokeWidth = size * 0.05f
+        c.drawText(s, x, y + size * 0.05f, text)
+        text.strokeWidth = size * 0.1f
         text.color = 0xFF14080A.toInt()
         c.drawText(s, x, y, text)
-        text.style = Paint.Style.FILL_AND_STROKE
         text.strokeWidth = size * 0.025f
         text.color = color
         c.drawText(s, x, y, text)
         text.style = Paint.Style.FILL
+        text.textScaleX = 1f
+    }
+
+    /** The reference's score digits: cream-to-gold fill with a dark outline. */
+    private fun creamText(c: Canvas, s: String, spot: TextSpot) {
+        val size = spot.size
+        text.typeface = assets.fredoka
+        text.textSize = size
+        text.textScaleX = spot.scaleX
+        text.textAlign = Paint.Align.LEFT
+        text.shader = null
+        text.strokeJoin = Paint.Join.ROUND
+        text.style = Paint.Style.FILL_AND_STROKE
+        text.strokeWidth = size * 0.17f
+        text.color = 0xFF1A0C06.toInt()
+        c.drawText(s, spot.x, spot.y + size * 0.04f, text)
+        text.strokeWidth = size * 0.11f
+        text.color = 0xFF2E1608.toInt()
+        c.drawText(s, spot.x, spot.y, text)
+        text.style = Paint.Style.FILL
+        text.shader = LinearGradient(0f, spot.y - size * 0.72f, 0f, spot.y, intArrayOf(
+            0xFFFFFDF0.toInt(), 0xFFFFF3B8.toInt(), 0xFFFFDC62.toInt(), 0xFFF3B83A.toInt(),
+        ), floatArrayOf(0f, 0.35f, 0.75f, 1f), Shader.TileMode.CLAMP)
+        c.drawText(s, spot.x, spot.y, text)
+        text.shader = null
+        text.textScaleX = 1f
     }
 
     /** Yellow-to-orange fill, thin red rim, chunky brown outline: the reference's "Combo x9" / "+30". */
@@ -558,61 +592,50 @@ class Renderer(private val assets: Assets) {
 
     // ---- Goal panel ------------------------------------------------------------------
 
+    /**
+     * Fills the painted Goal board: the instruction, then the colour cycle as five mini
+     * blocks in order (touching blocks step one to the right; the last wraps to the
+     * first). The loaded ball's colour is outlined; colours no longer on the board dim.
+     */
     private fun drawGoalPanel(c: Canvas, game: Level5Game, now: Float) {
-        dst.set(GOAL.l, GOAL.t, GOAL.r, GOAL.b)
-        fill.shader = null
-        fill.color = 0xD6241208.toInt()
-        c.drawRoundRect(dst, 18f, 18f, fill)
-        stroke.color = 0xFF9A6630.toInt()
-        stroke.strokeWidth = 3f
-        c.drawRoundRect(dst, 18f, 18f, stroke)
-        stroke.color = 0x55FFD28A
-        stroke.strokeWidth = 1.5f
-        dst.inset(5f, 5f)
-        c.drawRoundRect(dst, 14f, 14f, stroke)
+        val g = hud.goalText
+        val x0 = g.l + 9f
+        whiteText(c, "Hit the blocks", x0, g.t + 32f, 26f, Color.WHITE, scaleX = 0.92f)
+        whiteText(c, "and clear them", x0, g.t + 63f, 26f, Color.WHITE, scaleX = 0.92f)
+        whiteText(c, "all!", x0, g.t + 94f, 26f, Color.WHITE, scaleX = 0.92f)
 
-        val cx = GOAL.cx
-        goldText(c, "Goal", cx, GOAL.t + 50f, 44f, Paint.Align.CENTER, 0f, rim = false)
-        text.typeface = assets.nunito
-        text.textSize = 21f
-        text.textAlign = Paint.Align.CENTER
-        text.shader = null
-        text.style = Paint.Style.FILL
-        text.color = Color.WHITE
-        c.drawText("Hit the blocks", cx, GOAL.t + 84f, text)
-        c.drawText("and clear them all", cx, GOAL.t + 109f, text)
-
-        // Colour cycle: blocks next to a cleared group step one swatch to the right.
         val present = game.board.colorsPresent()
         val n = GameColor.entries.size
         val size = 28f
-        val gap = 10f
-        val total = n * size + (n - 1) * gap
-        var x = cx - total / 2f
-        val y = GOAL.t + 124f
+        val gap = (g.w - 6f - n * size) / (n - 1)
+        val y = g.b - size - 8f
+        var x = g.l + 3f
+        val icon = swatchSource
         for ((i, col) in GameColor.entries.withIndex()) {
             val on = col in present
             dst.set(x, y, x + size, y + size)
-            fill.color = if (on) col.swatch else darken(col.swatch, 0.35f)
-            c.drawRoundRect(dst, 6f, 6f, fill)
-            fill.color = 0x55FFFFFF
-            dst.set(x + 3f, y + 3f, x + size - 3f, y + size * 0.45f)
-            if (on) c.drawRoundRect(dst, 4f, 4f, fill)
+            if (on) c.drawBitmap(assets.blocks.getValue(col), icon, dst, bmpPaint)
+            else {
+                fadePaint.alpha = 90
+                c.drawBitmap(assets.blocks.getValue(col), icon, dst, fadePaint)
+                fadePaint.alpha = 255
+            }
             if (col == game.color && !game.over) {
                 val pulse = 0.5f + 0.5f * sin(now * 6f)
                 stroke.color = Color.WHITE
-                stroke.strokeWidth = 3f + pulse
-                dst.set(x - 3.5f, y - 3.5f, x + size + 3.5f, y + size + 3.5f)
-                c.drawRoundRect(dst, 8f, 8f, stroke)
+                stroke.strokeWidth = 2.5f + pulse
+                dst.set(x - 3f, y - 3f, x + size + 3f, y + size + 3f)
+                c.drawRoundRect(dst, 7f, 7f, stroke)
             }
             if (i < n - 1) {
-                fill.color = 0xCCFFE3A8.toInt()
+                fill.shader = null
+                fill.color = 0xE6FFE3A8.toInt()
                 val ax = x + size + gap / 2f
                 val ay = y + size / 2f
                 path.reset()
-                path.moveTo(ax - 2.5f, ay - 4f)
+                path.moveTo(ax - 2.5f, ay - 4.5f)
                 path.lineTo(ax + 3f, ay)
-                path.lineTo(ax - 2.5f, ay + 4f)
+                path.lineTo(ax - 2.5f, ay + 4.5f)
                 path.close()
                 c.drawPath(path, fill)
             }
@@ -620,25 +643,34 @@ class Renderer(private val assets: Assets) {
         }
     }
 
+    /** Atlas rect of one block (the central blue sparkle block) used as the swatch icon. */
+    private val swatchSource: Rect = spec.blocks.first { it.id == "b19" }.rect.let {
+        Rect((it.l - spec.atlasX).toInt(), (it.t - spec.atlasY).toInt(), (it.r - spec.atlasX).toInt(), (it.b - spec.atlasY).toInt())
+    }
+
     // ---- overlays --------------------------------------------------------------------
 
     private fun drawPaused(c: Canvas) {
         c.drawColor(0x8C000000.toInt())
-        goldText(c, "Paused", 512f, 720f, 110f, Paint.Align.CENTER, 0f)
-        whiteText(c, "Tap to resume", 512f - measure("Tap to resume", 44f) / 2f, 800f, 44f, Color.WHITE)
+        val cx = spec.stageW / 2f
+        val cy = spec.stageH * 0.42f
+        goldText(c, "Paused", cx, cy, 96f, Paint.Align.CENTER, 0f)
+        whiteText(c, "Tap to resume", cx, cy + 76f, 40f, Color.WHITE, Paint.Align.CENTER)
     }
 
     private fun drawEndCard(c: Canvas, game: Level5Game, title: String, hint: String) {
         c.drawColor(0x99000000.toInt())
-        goldText(c, title, 512f, 640f, 96f, Paint.Align.CENTER, 0f)
+        val cx = spec.stageW / 2f
+        val cy = spec.stageH * 0.4f
+        goldText(c, title, cx, cy, 78f, Paint.Align.CENTER, 0f)
         for (i in 0 until 3) {
             val bmp = if (i < game.stars) assets.starGold else assets.starEmpty
-            val cx = 512f + (i - 1) * 118f
-            dst.set(cx - bmp.width * 0.55f, 700f, cx + bmp.width * 0.55f, 700f + bmp.height * 1.1f)
+            val sx = cx + (i - 1) * 100f
+            dst.set(sx - bmp.width * 0.55f, cy + 36f, sx + bmp.width * 0.55f, cy + 36f + bmp.height * 1.1f)
             c.drawBitmap(bmp, null, dst, bmpPaint)
         }
-        whiteText(c, "Score %,d".format(game.score), 512f - measure("Score %,d".format(game.score), 60f) / 2f, 900f, 60f, Color.WHITE)
-        whiteText(c, hint, 512f - measure(hint, 42f) / 2f, 980f, 42f, Color.WHITE)
+        whiteText(c, "Score %,d".format(game.score), cx, cy + 200f, 52f, Color.WHITE, Paint.Align.CENTER)
+        whiteText(c, hint, cx, cy + 270f, 38f, Color.WHITE, Paint.Align.CENTER)
     }
 
     private fun measure(s: String, size: Float): Float {
@@ -676,30 +708,5 @@ class Renderer(private val assets: Assets) {
         const val SHIFT_TIME = 0.42f
         const val BREAK_TIME = 0.34f
         const val INTRO_FX = 1.0f
-
-        // Text placement fitted to the reference (see tools/assets/fit_text.py).
-        const val TIMER_X = 873f
-        const val TIMER_Y = 97f
-        const val TIMER_SIZE = 57f
-        const val SCORE_X = 68f
-        const val SCORE_Y = 1442f
-        const val SCORE_SIZE = 78f
-        const val COINS_RIGHT = 866f
-        const val COINS_Y = 1422f
-        const val COINS_SIZE = 85f
-        const val COMBO_X = 745f
-        const val COMBO_Y = 323f
-        const val COMBO_SIZE = 97f
-        const val COMBO_SCALE_X = 0.82f
-        const val COMBO_ANGLE = -9f
-        const val COMBO_N_X = 880f
-        const val COMBO_N_Y = 415f
-        const val COMBO_N_SIZE = 148f
-        const val COMBO_N_ANGLE = -5f
-        const val COMBO_PIVOT_X = 868f
-        const val COMBO_PIVOT_Y = 340f
-
-        /** Goal panel (from the colour-shift reference): under the pause button. */
-        val GOAL = com.islandblast.game.model.Box(22f, 166f, 238f, 334f)
     }
 }
