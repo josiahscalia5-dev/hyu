@@ -76,10 +76,19 @@ BLOCK_DONORS = {"b18": "b19", "b20": "b19"}
 
 # ---- scene ------------------------------------------------------------------
 FORMATION_BOX = (172, 505, 675, 1000)
-ATLAS_BOX = (160, 495, 690, 1010)
+ATLAS_BOX = (110, 495, 700, 1010)   # wide enough for the gems thrown clear (STRAY_SHARDS)
 CORNER_R = 6
-# Stray shards thrown outside the formation box.
-STRAY_SHARDS = []
+# Painted gems away from the blocks (thrown clear, or caught on the scenery): removed
+# from the plate so none stays frozen there; the opening frame's effect layer throws them.
+STRAY_SHARDS = [
+    (160, 850, 186, 888),   # yellow chip left of b23
+    (120, 895, 174, 928),   # orange gem, left foliage
+    (116, 942, 172, 978),   # cyan gem, left foliage
+    (158, 922, 184, 940),   # lilac gem beside b25
+    (664, 886, 693, 912),   # teal gem, right foliage
+    (650, 770, 682, 806),   # yellow gem right of b27
+    (608, 708, 630, 726),   # blue gem under the right torch
+]
 
 # The blue ball; its gold cup belongs to the launcher and stays in the background.
 BALL_CENTER, BALL_R = (421, 1654), 74
@@ -103,6 +112,7 @@ SCORE_DIGITS = (38, 1657, 200, 1724)
 GOLD_TEXT_BOXES = [(598, 366, 826, 574), (606, 1630, 732, 1698)]   # "Combo x9", "+30"
 COIN_CENTER, COIN_R = (773, 1663), 44
 # Goal board: the painted instructions and swatches are replaced by live ones.
+GOAL_BOARD = (15, 297, 236, 560)
 GOAL_TEXT_AREA = (36, 388, 212, 542)
 # Extents of the HUD, used to keep it inside the phone's safe area.
 HUD_EXTENT = (12, 138, 830, 1745)
@@ -123,7 +133,11 @@ RAMP_POOL = {
 # Scenery inside the formation area that must survive the plate fill (wall torches),
 # and painted shards overlapping it that must still go.
 KEEP_RECTS = [(160, 548, 229, 694), (601, 548, 683, 690)]
-KEEP_EXCEPT = [(586, 648, 620, 702)]
+KEEP_EXCEPT = [
+    (572, 648, 620, 702),   # gem left of the right torch
+    (624, 671, 663, 703),   # gem hanging under the right torch
+    (194, 680, 229, 707),   # gem hanging under the left torch
+]
 
 # Painted gems thrown by the explosion, reused as hit shards: (box, seed point inside).
 GEMS = [

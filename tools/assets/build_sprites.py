@@ -233,6 +233,37 @@ def subtract_rect(r, c):
     return out
 
 
+def lit_scenery(hsv, sel, bw, bh):
+    """True when a piece of the frame-0 effect layer is lit scenery, not debris: rim
+    lights and streaks, torch-lit stone, foliage and haze."""
+    hh, s, v = (hsv[..., k][sel] for k in range(3))
+    stone = ((hh >= 5) & (hh <= 22) & (s < 200) & (v < 230)).mean()
+    green = ((hh >= 30) & (hh <= 90) & (s > 80)).mean()
+    vivid = (((s > 170) & (v > 170)) | (v > 235)).mean()
+    hollow = sel.sum() < 0.35 * bw * bh and max(bw, bh) >= 40   # outlines, L-shaped rims
+    return (max(bw, bh) >= 3 * min(bw, bh) or hollow or stone >= 0.3 or green >= 0.3
+            or np.median(s) < 90 or (sel.sum() >= 1500 and vivid < 0.5))
+
+
+def merge_overlapping(boxes):
+    """Union boxes (l, t, r, b) until no two overlap."""
+    boxes = [list(b) for b in boxes]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                a, b = boxes[i], boxes[j]
+                if a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]:
+                    boxes[i] = [min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3])]
+                    del boxes[j]
+                    merged = True
+                    break
+            if merged:
+                break
+    return boxes
+
+
 def block_parts():
     """Each block's visible rects: its rect minus every block that owns the overlap.
 
@@ -320,7 +351,7 @@ def build(work):
 
     # ---- frame-0 effects ---------------------------------------------------
     zone = cv2.dilate(np.array(Image.open(os.path.join(work, "mask_formation.png"))), np.ones((15, 15), np.uint8))
-    for bx in layout.GOLD_TEXT_BOXES:
+    for bx in layout.GOLD_TEXT_BOXES + [layout.GOAL_BOARD]:
         cv2.rectangle(zone, bx[:2], bx[2:], 0, -1)
     r16, c16 = ref.astype(np.int16), comp.astype(np.int16)
     diff = np.abs(r16 - c16).sum(axis=2)
@@ -337,32 +368,45 @@ def build(work):
 
     burst_zone = np.zeros((h, w), np.uint8)
     cv2.ellipse(burst_zone, BURST_CENTER, (FLASH_R, int(FLASH_R * 0.88)), 0, 0, 360, 255, -1)
-    fx_a = soft(eff)
-    save_rgba(os.path.join(OUT, "fx_intro.png"), ref[ay0:ay1, ax0:ax1], fx_a[ay0:ay1, ax0:ax1])
-    save_rgba(os.path.join(OUT, "fx_intro_bg.png"), ref[ay0:ay1, ax0:ax1], soft(resid)[ay0:ay1, ax0:ax1])
-
-    pieces = []
     burst_px = (eff > 0) & (burst_zone > 0)
     ys, xs = np.nonzero(burst_px)
-    pieces.append({"kind": "burst", "rect": [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1],
-                   "center": list(BURST_CENTER)})
-    rest = ((eff > 0) & ~burst_px).astype(np.uint8)
-    n, lab, st, cents = cv2.connectedComponentsWithStats(rest, 8)
-    shard_cands = []
-    for i in range(1, n):
-        x, y, bw, bh, area = (int(v) for v in st[i])
-        if area < 8:
-            continue
-        pieces.append({"kind": "shard", "rect": [x, y, x + bw, y + bh],
-                       "center": [round(float(cents[i][0]), 1), round(float(cents[i][1]), 1)]})
-        if 250 <= area <= 3000 and max(bw, bh) / max(1, min(bw, bh)) < 2.2:
-            shard_cands.append((area, i, x, y, bw, bh))
-    # Burst pixels need their own alpha region so pieces never overlap in the atlas.
-    fx_burst_a = np.where(burst_px[..., None].repeat(1, 2)[..., 0], fx_a, 0)
-    fx_shard_a = np.where(burst_px, 0, fx_a)
+    pieces = [{"kind": "burst", "rect": [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1],
+               "center": list(BURST_CENTER)}]
+
+    # The rest is either debris, which flies off, or lit scenery (stone, rims, foliage),
+    # which stays put and fades with the flash in the fx_intro_bg layer. The gems
+    # listed in the layout always fly, even where they touch lit stone.
+    rest = (eff > 0) & ~burst_px
+    listed = np.zeros((h, w), bool)
+    for l, t, r, b in layout.STRAY_SHARDS + layout.KEEP_EXCEPT:
+        listed[t:b, l:r] = True
+    debris = np.zeros((h, w), bool)
+    glow = np.zeros((h, w), bool)
+    boxes = []
+    for part, is_gem in ((rest & ~listed, False), (rest & listed, True)):
+        n, lab, st, _ = cv2.connectedComponentsWithStats(part.astype(np.uint8), 8)
+        for i in range(1, n):
+            x, y, bw, bh, area = (int(v) for v in st[i])
+            sel = lab == i
+            if area < 8 or (not is_gem and lit_scenery(hsv, sel, bw, bh)):
+                glow |= sel
+            else:
+                debris |= sel
+                boxes.append([max(x - 2, ax0), max(y - 2, ay0), min(x + bw + 2, ax1), min(y + bh + 2, ay1)])
+    # A piece is drawn as its whole rect, so rects that overlap fly as one piece;
+    # otherwise the shared pixels would be drawn twice, heading two ways.
+    for l, t, r, b in merge_overlapping(boxes):
+        ys, xs = np.nonzero(debris[t:b, l:r])
+        pieces.append({"kind": "shard", "rect": [l, t, r, b],
+                       "center": [round(float(xs.mean()) + l, 1), round(float(ys.mean()) + t, 1)]})
+    print(len(boxes), "debris parts in", len(pieces) - 1, "pieces;", int(glow.sum()), "px of lit scenery fade in place")
+
     save_rgba(os.path.join(OUT, "fx_intro.png"), ref[ay0:ay1, ax0:ax1],
-              np.maximum(fx_shard_a, 0)[ay0:ay1, ax0:ax1])
-    save_rgba(os.path.join(OUT, "fx_intro_burst.png"), ref[ay0:ay1, ax0:ax1], fx_burst_a[ay0:ay1, ax0:ax1])
+              soft(debris.astype(np.uint8) * 255)[ay0:ay1, ax0:ax1])
+    save_rgba(os.path.join(OUT, "fx_intro_burst.png"), ref[ay0:ay1, ax0:ax1],
+              np.where(burst_px, soft(eff), 0)[ay0:ay1, ax0:ax1])
+    save_rgba(os.path.join(OUT, "fx_intro_bg.png"), ref[ay0:ay1, ax0:ax1],
+              np.maximum(soft(resid), soft(glow.astype(np.uint8) * 255))[ay0:ay1, ax0:ax1])
 
     # ---- gameplay flash: the jagged yellow-white star from the reference ------
     fx0, fy0 = FLASH_CENTER

@@ -44,6 +44,9 @@ def formation_mask(ref):
         cv2.rectangle(m, b[:2], b[2:], 255, -1)
     for b in layout.KEEP_RECTS:
         cv2.rectangle(m, b[:2], b[2:], 0, -1)
+    # The Goal board's frame reaches into the box; its painted swatches go with the
+    # instructions (detail mask), the wood stays exactly as painted.
+    cv2.rectangle(m, layout.GOAL_BOARD[:2], layout.GOAL_BOARD[2:], 0, -1)
     for b in layout.KEEP_EXCEPT:
         cv2.rectangle(m, b[:2], b[2:], 255, -1)
     for _, l, t, r, b, *_ in layout.BLOCKS:
@@ -68,6 +71,16 @@ def gold_text_mask(ref):
     m = cv2.dilate(m * 255, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
     cv2.circle(m, layout.COIN_CENTER, layout.COIN_R, 0, -1)  # keep the coin icon
     return m
+
+
+def despeckle(plate, inner):
+    """Paint out the white sparkles LaMa invents deep inside the fill (echoes of the flash)."""
+    grey = cv2.cvtColor(plate, cv2.COLOR_RGB2GRAY)
+    sat = cv2.cvtColor(plate, cv2.COLOR_RGB2HSV)[..., 1]
+    bright = grey.astype(np.int16) - cv2.medianBlur(grey, 21) > 45
+    specks = (bright & (sat < 100) & (inner > 0)).astype(np.uint8) * 255
+    specks = cv2.bitwise_and(cv2.dilate(specks, np.ones((5, 5), np.uint8)), inner)
+    return cv2.inpaint(plate, specks, 4, cv2.INPAINT_TELEA)
 
 
 def detail_mask(shape, ref):
@@ -151,6 +164,7 @@ def build(work):
     smooth = cv2.bilateralFilter(plate, 9, 18, 7)
     soft = cv2.GaussianBlur(inner.astype(np.float32) / 255.0, (0, 0), 6)[..., None]
     plate = (plate * (1 - soft) + smooth * soft).round().astype(np.uint8)
+    plate = despeckle(plate, inner)
 
     det = detail_mask((h, w), ref)
     filled = lama.inpaint(plate, det)

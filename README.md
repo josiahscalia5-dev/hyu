@@ -1,12 +1,15 @@
 # Island Blast — Level 5
 
-Android (Kotlin, API 26+) implementation of the approved Level 5 screen with the
-colour-shift shooting mechanic.
+Android (Kotlin, API 26+) implementation of the approved full-screen Level 5 design
+with the colour-shift shooting mechanic.
 
-- `design/level5_reference.png`: the approved screen, which is the visual spec.
+- `design/level5_fullscreen_reference.png`: the approved full-screen design
+  (840×1871), which is the visual spec.
+- `design/level5_reference.png`: the earlier approved screen (1024×1536), kept for
+  reference.
 - `design/level5_color_shift_reference.png`: the six-stage colour-shift storyboard.
 - `design/renders/`: what the app actually draws, rendered by the test suite
-  (`frame0_vs_reference.png`, `color_shift_storyboard.png`, `phone_20x9.png`).
+  (`frame0_vs_reference.png`, `color_shift_storyboard.png`, `phones.png`).
 
 ## How it looks like the reference
 
@@ -14,19 +17,25 @@ The art is **cut from the approved image itself**, not redrawn:
 
 | Layer | Source |
 |---|---|
-| Temple, stairs, pillars, torches, foliage, sign, stars, pause button, timer and score panels, coin, launcher beams | `background.png`: the reference with the moving parts removed (Big-LaMa inpainting) |
+| Temple, stairs, pillars, torches, waterfalls, foliage, sign, stars, pause button, Goal board, timer and score panels, coin, launcher cup and beams | `background.png`: the reference with the moving parts removed (Big-LaMa inpainting) |
+| Scenery past the design's edges | `background_ext.png`: the plate outpainted 180 px left and right and 120 px top and bottom (Big-LaMa), brightness-matched to the scene edge |
 | Blocks | Each block's own pixels from the reference, plus the same block recoloured into the other four colours using shading ramps learned from the painted blocks |
 | Ball | The painted blue ball; the other colours are hue-shifted from it |
 | Hit flash, gem shards | The painted explosion's star flash and gems |
 | Aim chevrons | Traced from the painted chevrons, at the painted spacing and sizes |
-| Live numbers ("0:36", "1,760", "+30", "Combo x9") | Fredoka Bold, size and position fitted to the painted text |
+| Live text ("0:36", "1,760", "+30", "Combo x9", the Goal instructions) | Fredoka Bold, size and position fitted to the painted text |
 
-The first frame is the approved screen. Its explosion is the painted one, which
-then flies apart. `frame0_vs_reference.png` shows both side by side.
+The first frame is the approved screen. Its explosion is the painted one: over
+the first second its gems and sparks fly apart, while the light it casts on the
+stone, the block rims and the foliage fades where it is. `frame0_vs_reference.png`
+shows the design and frame 0 side by side.
 
-The layout is the reference's 1024×1536 grid scaled uniformly, so it never
-stretches. On taller phones the extra height shows a mirrored blur of the scene
-edges.
+The layout is the design's 840×1871 grid, scaled uniformly so it never
+stretches. `GameView` scales it to cover the screen edge to edge, but never so far
+that a HUD element (pause, sign, timer, Goal, combo, score, coins) leaves the
+safe area (camera cutout, system bars, rounded corners). Anything the design does
+not cover shows the painted margins of `background_ext.png`, so no phone shape
+gets bars. `phones.png` shows five shapes.
 
 ## Colour-shift mechanic
 
@@ -63,14 +72,16 @@ Stars are earned at 1,000, 1,500 and 4,000 points. Clearing the board adds
 - **Time bonus.** 36 seconds is very tight for 31 blocks, so each cleared
   block adds 0.5 s. The timer briefly flashes green when this happens. Set
   `timeBonusPerBlock = 0f` to turn it off.
-- **In-between hues.** Four painted blocks are halfway between two colours
-  (two orchid, one crimson, one hot pink). They show as painted on the first
-  frame, then settle to purple or red about a second in, so the colour rule is
-  never ambiguous.
-- **Goal panel.** It is not in the single approved screen. It was added from
-  the colour-shift storyboard, under the pause button.
+- **In-between hues.** Seven painted blocks are halfway between two colours
+  (five orchid, two crimson-pink). They show as painted on the first frame, then
+  settle to purple or red about a second in, so the colour rule is never
+  ambiguous.
+- **Goal board.** The approved design paints four swatches and a doubled
+  "all! al!". The app writes the instructions without the typo, and the swatches
+  show the whole five-colour cycle in order: the loaded colour is outlined, and
+  colours no longer on the board fade out.
 - **Font.** Fredoka Bold is the closest open-licence match. The painted
-  "Combo" lettering is slightly narrower, so it is condensed to 82 % width.
+  "Combo" lettering is slightly narrower, so it is condensed to 80 % width.
 
 ## Build and test
 
@@ -120,8 +131,15 @@ The tests run the real game code headless (Robolectric native graphics):
 - `PlaythroughTest`: a bot aims with the aim guide and clears the whole level
   with 1.2 s of aiming per shot. It checks every group clear and every
   neighbour's colour after every shift.
-- `ScreenshotTest`: writes frame 0, the storyboard stages, pause, time-up and
-  a 1080×2400 phone frame to `app/build/level5-shots/`.
+- `ScreenshotTest`: writes frame 0, the storyboard stages, pause and time-up
+  to `app/build/level5-shots/`. Frame 0 must match the approved design: under
+  6 % of its pixels may differ by more than 30 (RGB sum).
+- `FullScreenTest`: draws the real `GameView` on five phone shapes (20:9
+  punch-hole, 19.5:9 notch, 16:9, 21:9 with cutout, small 720×1600). On each it
+  checks that every screen edge is painted scenery, every HUD element is inside
+  the safe area, the Goal board and combo stay clear of the blocks, and the game
+  spans at least 90 % of the width. Frames and a size report go to
+  `app/build/level5-shots/phones/`.
 
 ## Regenerating the art
 
@@ -132,5 +150,6 @@ python3 tools/assets/build_plate.py  /tmp/level5_work
 python3 tools/assets/build_sprites.py /tmp/level5_work
 ```
 
-Block rectangles and touch-ups live in `tools/assets/layout.py`.
+Block rectangles, touch-ups and the painted gems to remove from the scenery
+(`STRAY_SHARDS`, `KEEP_EXCEPT`) live in `tools/assets/layout.py`.
 `fit_text.py` re-fits the HUD text to the reference.
