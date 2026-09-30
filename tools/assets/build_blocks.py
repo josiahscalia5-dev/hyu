@@ -36,15 +36,58 @@ def rounded_rect_mask(shape, rect, r):
     return m
 
 
-def clean_blocks(ref):
-    h, w = ref.shape[:2]
-    m = np.zeros((h, w), np.uint8)
-    for t in layout.BLOCK_TOUCHUPS:
+def shapes_mask(shape, shapes):
+    m = np.zeros(shape, np.uint8)
+    for t in shapes:
         if t[0] == "rect":
             cv2.rectangle(m, t[1:3], t[3:5], 255, -1)
         else:
             cv2.line(m, t[1:3], t[3:5], 255, t[5])
+    return m
+
+
+def mirror_patch(img, rect, axis):
+    """Replace rect with the mirror image of the other side of `axis`.
+
+    The axis is refined by matching the undamaged lower rows of the rect against
+    their mirror, so the rebuilt half lines up with the symbol's real centre.
+    """
+    l, t, r, b = rect
+    probe = img[b - 12:b, :].astype(np.float32)
+
+    def cost(ax):
+        xs = np.arange(l, r)
+        src = np.round(2 * ax - xs).astype(int)
+        return float(np.abs(probe[:, xs] - probe[:, src]).mean())
+
+    best = min(np.arange(axis - 3, axis + 3.01, 0.5), key=cost)
+    out = img.copy()
+    xs = np.arange(l, r)
+    src = np.round(2 * best - xs).astype(int)
+    out[t:b, l:r] = img[t:b][:, src]
+    # Feather the seam at the top/bottom/left edges of the patch.
+    a = np.zeros((b - t, r - l), np.float32)
+    a[2:-2, 2:] = 1
+    a = cv2.GaussianBlur(a, (0, 0), 1.2)[..., None]
+    out[t:b, l:r] = (out[t:b, l:r] * a + img[t:b, l:r] * (1 - a)).round().astype(np.uint8)
+    return out
+
+
+def clean_blocks(ref):
+    h, w = ref.shape[:2]
+    m = shapes_mask((h, w), layout.BLOCK_TOUCHUPS)
     out = lama.inpaint(ref, m)
+    for (l, t, r, bt), axis in layout.BLOCK_MIRRORS:
+        out = mirror_patch(out, (l, t, r, bt), axis)
+    hsv = cv2.cvtColor(out, cv2.COLOR_RGB2HSV)
+    for l, t, r, bt in layout.DESPARKLE_RECTS:
+        sp = np.zeros((h, w), np.uint8)
+        sp[t:bt, l:r] = ((hsv[t:bt, l:r, 2] > 200) & (hsv[t:bt, l:r, 1] < 110)).astype(np.uint8) * 255
+        sp = cv2.dilate(sp, np.ones((3, 3), np.uint8))
+        out = cv2.inpaint(out, sp, 2, cv2.INPAINT_TELEA)
+    sm = shapes_mask((h, w), layout.SMOOTH_TOUCHUPS)
+    out = cv2.inpaint(out, sm, 4, cv2.INPAINT_TELEA)
+    m = np.maximum(m, sm)
     for (l, t, r, bt), (sx, sy) in layout.BLOCK_PATCHES:
         out[t:bt, l:r] = out[sy:sy + bt - t, sx:sx + r - l]
     rects = {b[0]: b[1:5] for b in layout.BLOCKS}

@@ -16,9 +16,13 @@ class Assets(private val am: AssetManager) {
         inPreferredConfig = Bitmap.Config.ARGB_8888
     }
 
+    /**
+     * Art is authored in stage pixels and always drawn through the stage transform,
+     * so it is marked density-free: Android must never rescale it for the screen.
+     */
     private fun bmp(name: String): Bitmap =
-        am.open("$DIR/$name").use { BitmapFactory.decodeStream(it, null, opts) }
-            ?: error("Missing asset $name")
+        (am.open("$DIR/$name").use { BitmapFactory.decodeStream(it, null, opts) } ?: error("Missing asset $name"))
+            .apply { density = Bitmap.DENSITY_NONE }
 
     private fun perColor(prefix: String) = GameColor.entries.associateWith { bmp("${prefix}_${it.key}.png") }
 

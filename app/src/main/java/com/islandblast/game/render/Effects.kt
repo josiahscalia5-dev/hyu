@@ -71,6 +71,15 @@ class Effects(private val assets: Assets, seed: Int = 5) {
             else -> Unit
         }
         game.events.clear()
+        prune(now)
+    }
+
+    /** Drops finished effects. Runs every frame, drawn or not (e.g. while the screen is off). */
+    private fun prune(now: Float) {
+        rings.removeAll { now - it.start > it.life }
+        flashes.removeAll { now - it.start > FLASH_LIFE }
+        shards.removeAll { now - it.start > it.life }
+        sparks.removeAll { now - it.start > it.life }
     }
 
     private fun blockBurst(game: Level5Game, e: GameEvent.Cleared, now: Float) {
@@ -104,19 +113,17 @@ class Effects(private val assets: Assets, seed: Int = 5) {
     }
 
     fun draw(c: Canvas, now: Float) {
-        rings.removeAll { now - it.start > it.life }
         for (r in rings) {
             val k = ((now - r.start) / r.life).coerceIn(0f, 1f)
-            if (now < r.start) continue
+            if (now < r.start || now - r.start > r.life) continue
             ringPaint.color = r.color
             ringPaint.alpha = (255 * (1f - k)).toInt()
             ringPaint.strokeWidth = r.width * (1f - 0.6f * k)
             c.drawCircle(r.x, r.y, r.radius * (0.35f + 0.65f * easeOut(k)), ringPaint)
         }
 
-        flashes.removeAll { now - it.start > FLASH_LIFE }
         for (f in flashes) {
-            if (now < f.start) continue
+            if (now < f.start || now - f.start > FLASH_LIFE) continue
             val k = (now - f.start) / FLASH_LIFE
             val bmp = assets.burst.getValue(f.color)
             val s = f.size * (0.6f + 0.75f * easeOut(k))
@@ -136,9 +143,8 @@ class Effects(private val assets: Assets, seed: Int = 5) {
             }
         }
 
-        shards.removeAll { now - it.start > it.life }
         for (s in shards) {
-            if (now < s.start) continue
+            if (now < s.start || now - s.start > s.life) continue
             val t = now - s.start
             val k = t / s.life
             val x = s.x + s.vx * t
@@ -153,9 +159,8 @@ class Effects(private val assets: Assets, seed: Int = 5) {
         }
         plain.alpha = 255
 
-        sparks.removeAll { now - it.start > it.life }
         for (p in sparks) {
-            if (now < p.start) continue
+            if (now < p.start || now - p.start > p.life) continue
             val t = now - p.start
             val k = t / p.life
             val x = p.x + p.vx * t

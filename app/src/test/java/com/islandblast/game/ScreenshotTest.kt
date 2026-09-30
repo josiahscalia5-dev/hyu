@@ -27,12 +27,13 @@ class ScreenshotTest {
     private val assets get() = TestLevel.assets
     private val out = File(System.getProperty("level5.repo") ?: ".", "app/build/level5-shots").apply { mkdirs() }
 
-    private fun render(game: Level5Game, fx: Effects, renderer: Renderer, name: String) {
+    private fun render(game: Level5Game, fx: Effects, renderer: Renderer, name: String): IntArray {
         val bmp = Bitmap.createBitmap(1024, 1536, Bitmap.Config.ARGB_8888)
         renderer.draw(Canvas(bmp), game, fx)
         val px = IntArray(1024 * 1536)
         bmp.getPixels(px, 0, 1024, 0, 0, 1024, 1536)
         Png.write(File(out, "$name.png"), 1024, 1536, px)
+        return px
     }
 
     private fun step(game: Level5Game, fx: Effects, seconds: Float) {
@@ -42,7 +43,24 @@ class ScreenshotTest {
     @Test
     fun openingFrameMatchesTheApprovedScreen() {
         val game = Level5Game(assets.spec)
-        render(game, Effects(assets), Renderer(assets), "frame0")
+        val frame = render(game, Effects(assets), Renderer(assets), "frame0")
+        val repo = System.getProperty("level5.repo") ?: "."
+        val ref = android.graphics.BitmapFactory.decodeFile("$repo/design/level5_reference.png")
+        var off = 0
+        var counted = 0
+        for (y in 0 until 1536) for (x in 0 until 1024) {
+            if (x in 18..242 && y in 160..340) continue // Goal panel, added from the storyboard
+            val a = frame[y * 1024 + x]
+            val b = ref.getPixel(x, y)
+            val d = kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) +
+                kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) +
+                kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+            if (d > 30) off++
+            counted++
+        }
+        val share = off * 100.0 / counted
+        println("frame 0 vs approved reference: %.2f%% of pixels differ by more than 30".format(share))
+        assertTrue("frame 0 drifted from the approved screen: %.2f%% pixels differ".format(share), share < 6.0)
     }
 
     /** The six beats of the colour-shift storyboard, driven by real shots. */

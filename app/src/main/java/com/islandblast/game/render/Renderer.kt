@@ -38,6 +38,7 @@ class Renderer(private val assets: Assets) {
     private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val fadePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val flashPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val breakPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val addPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
@@ -55,15 +56,11 @@ class Renderer(private val assets: Assets) {
     /** Score/coins roll up to their new values instead of jumping. */
     private var shownScore = -1f
     private var shownCoins = -1f
-    private var lastComboShown = -1
-    private var comboChangedAt = -10f
     private var lastFrameTime = 0f
 
     fun reset() {
         shownScore = -1f
         shownCoins = -1f
-        lastComboShown = -1
-        comboChangedAt = -10f
         trail.clear()
     }
 
@@ -94,12 +91,7 @@ class Renderer(private val assets: Assets) {
         for (b in game.board.blocks) {
             if (!b.alive) {
                 val t = now - b.clearedAt
-                if (b.clearedAt >= 0f && t < BREAK_TIME) {
-                    val k = t / BREAK_TIME
-                    flashPaint.colorFilter = LightingColorFilter(0xFFFFFF, gray(0.35f + 0.6f * k))
-                    flashPaint.alpha = (255 * (1f - k)).toInt()
-                    drawBlockArt(c, b, assets.blocks.getValue(b.color), flashPaint, 1f + 0.18f * k, 0f)
-                }
+                if (b.clearedAt >= 0f && t in 0f..BREAK_TIME) drawBreak(c, b, t)
                 continue
             }
             val scalePop: Float
@@ -137,6 +129,49 @@ class Renderer(private val assets: Assets) {
                 flashPaint.colorFilter = LightingColorFilter(0xFFFFFF, gray(0.5f))
                 flashPaint.alpha = (150 * (1f - tb / 0.18f)).toInt()
                 drawBlockArt(c, b, art, flashPaint, 1f, shake)
+            }
+        }
+    }
+
+    /**
+     * A cleared block bursts apart: its own art splits into four chunks that fly out
+     * from the centre, spin and fade, flashing white for the first instant.
+     */
+    private fun drawBreak(c: Canvas, b: BlockState, t: Float) {
+        val k = t / BREAK_TIME
+        val atlas = assets.blocks.getValue(b.color)
+        val r = b.spec.rect
+        val flash = (1f - t / 0.07f).coerceIn(0f, 1f)
+        breakPaint.alpha = (255 * (1f - k * k)).toInt()
+        breakPaint.colorFilter = if (flash > 0f) LightingColorFilter(0xFFFFFF, gray(0.7f * flash)) else null
+        for (part in b.spec.parts) {
+            if (part.w < 6f || part.h < 6f) continue
+            val mx = part.cx
+            val my = part.cy
+            for (qx in 0..1) for (qy in 0..1) {
+                val l = if (qx == 0) part.l else mx
+                val rr = if (qx == 0) mx else part.r
+                val tp = if (qy == 0) part.t else my
+                val bt = if (qy == 0) my else part.b
+                val pcx = (l + rr) / 2f
+                val pcy = (tp + bt) / 2f
+                var dx = pcx - r.cx
+                var dy = pcy - r.cy
+                val n = hypot(dx, dy).coerceAtLeast(1f)
+                dx /= n; dy /= n
+                val speed = 330f + ((b.index * 7 + qx * 3 + qy * 5) % 5) * 40f
+                val ox = dx * speed * t
+                val oy = dy * speed * t + 0.5f * 1400f * t * t
+                val spin = (if ((qx + qy + b.index) % 2 == 0) 1f else -1f) * 260f * t
+                val sc = 1f - 0.35f * k
+                src.set((l - spec.atlasX).toInt(), (tp - spec.atlasY).toInt(), (rr - spec.atlasX).toInt(), (bt - spec.atlasY).toInt())
+                c.save()
+                c.translate(pcx + ox, pcy + oy)
+                c.rotate(spin)
+                c.scale(sc, sc)
+                dst.set(l - pcx, tp - pcy, rr - pcx, bt - pcy)
+                c.drawBitmap(atlas, src, dst, breakPaint)
+                c.restore()
             }
         }
     }
@@ -422,20 +457,34 @@ class Renderer(private val assets: Assets) {
         shownCoins = approach(shownCoins, game.coins.toFloat(), dt, 40f)
         goldText(c, "+${shownCoins.roundToInt()}", COINS_RIGHT, COINS_Y, COINS_SIZE, Paint.Align.RIGHT, 0f, rim = false)
 
-        // Combo.
-        if (game.combo != lastComboShown) {
-            if (lastComboShown >= 0) comboChangedAt = now
-            lastComboShown = game.combo
-        }
+        // Combo: pops when a clear raises it (timed from the clear, not from drawing).
         if (game.combo >= 2) {
-            val kc = ((now - comboChangedAt) / 0.3f).coerceIn(0f, 1f)
-            val pop = 1f + 0.35f * (1f - smooth(kc))
+            val kc = ((now - game.lastClearAt) / 0.3f).coerceIn(0f, 1f)
+            val pop = 1f + 0.25f * (1f - smooth(kc))
             c.save()
             c.scale(pop, pop, COMBO_PIVOT_X, COMBO_PIVOT_Y)
             goldText(c, "Combo", COMBO_X, COMBO_Y, COMBO_SIZE, Paint.Align.LEFT, COMBO_ANGLE, COMBO_SCALE_X)
-            goldText(c, "x${game.combo}", COMBO_N_X, COMBO_N_Y, COMBO_N_SIZE, Paint.Align.CENTER, COMBO_N_ANGLE)
+            drawComboNumber(c, "x${game.combo}")
             c.restore()
         }
+    }
+
+    /**
+     * "x9" as painted. Longer numbers ("x10", "x26") stay inside the painted number's
+     * footprint: they grow to the right a little, then shrink, so they never reach
+     * into the block formation below-left.
+     */
+    private fun drawComboNumber(c: Canvas, s: String) {
+        val base = measure("x9", COMBO_N_SIZE)
+        val w = measure(s, COMBO_N_SIZE)
+        if (w <= base) {
+            goldText(c, s, COMBO_N_X, COMBO_N_Y, COMBO_N_SIZE, Paint.Align.CENTER, COMBO_N_ANGLE)
+            return
+        }
+        val fit = min(w, base * 1.2f)
+        val size = COMBO_N_SIZE * fit / w
+        val shift = min(20f, (fit - base) / 2f)
+        goldText(c, s, COMBO_N_X + shift, COMBO_N_Y - (COMBO_N_SIZE - size) * 0.3f, size, Paint.Align.CENTER, COMBO_N_ANGLE)
     }
 
     private fun drawStars(c: Canvas, game: Level5Game, now: Float) {
@@ -625,7 +674,7 @@ class Renderer(private val assets: Assets) {
 
     companion object {
         const val SHIFT_TIME = 0.42f
-        const val BREAK_TIME = 0.14f
+        const val BREAK_TIME = 0.34f
         const val INTRO_FX = 1.0f
 
         // Text placement fitted to the reference (see tools/assets/fit_text.py).

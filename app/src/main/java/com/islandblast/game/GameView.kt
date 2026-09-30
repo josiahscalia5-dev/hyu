@@ -5,8 +5,10 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Shader
+import android.graphics.PointF
 import android.graphics.RectF
+import android.graphics.Shader
+import android.os.SystemClock
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
@@ -40,6 +42,25 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
     private var lastNanos = 0L
     private var running = false
 
+    /** When the win/lose card appeared (uptime ms); taps restart only after a short beat. */
+    private var overSince = 0L
+
+    /** The win/lose card is up and a tap will start the level again. */
+    val canRestart: Boolean
+        get() = game.over && overSince != 0L && SystemClock.uptimeMillis() - overSince >= RESTART_GUARD_MS
+
+    /** True while hit flashes, shards or sparks are still on screen. */
+    val effectsBusy: Boolean get() = effects.busy
+
+    /**
+     * Test hook: while true, frames keep drawing but game time stands still, so a
+     * test can capture and inspect the screen without the clock running on.
+     */
+    var clockHeld = false
+
+    /** Maps a stage point (reference pixels) to view pixels. */
+    fun stageToView(x: Float, y: Float) = PointF(offX + x * scale, offY + y * scale)
+
     // Touch state: a short tap on the ball switches colour, any drag aims, release shoots.
     private var downX = 0f
     private var downY = 0f
@@ -67,8 +88,9 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
         if (!running) return
         val dt = if (lastNanos == 0L) 0f else ((frameTimeNanos - lastNanos) / 1e9f)
         lastNanos = frameTimeNanos
-        game.update(min(dt, 1f / 30f))
+        if (!clockHeld) game.update(min(dt, 1f / 30f))
         effects.consume(game)
+        if (game.over && overSince == 0L) overSince = SystemClock.uptimeMillis()
         invalidate()
         Choreographer.getInstance().postFrameCallback(this)
     }
@@ -124,7 +146,7 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
                 downX = x; downY = y
                 aiming = false
                 if (game.over) {
-                    restart()
+                    if (canRestart) restart()
                     return true
                 }
                 if (game.paused) {
@@ -167,10 +189,12 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
         effects.clear()
         effects = Effects(assets)
         renderer.reset()
+        overSince = 0L
     }
 
     companion object {
         /** The painted pause button, in stage units. */
         private val PAUSE = RectF(24f, 18f, 172f, 156f)
+        private const val RESTART_GUARD_MS = 700L
     }
 }

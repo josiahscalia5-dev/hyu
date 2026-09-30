@@ -58,7 +58,7 @@ def lum(a):
     return 0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]
 
 
-def block_pixels(img, bid, rects, inset=3):
+def block_pixels(img, bid, rects, inset=6):
     l, t, r, b = rects[bid]
     return img[t + inset:b - inset, l + inset:r - inset].reshape(-1, 3)
 
@@ -82,8 +82,25 @@ class Ramp:
             lut[:, c] = np.interp(xs, xs[have], v[have])
         self.lut = np.stack([np.convolve(np.pad(lut[:, c], 12, mode="edge"), _gauss(12, 5), "valid")
                              for c in range(3)], axis=1)
+        self._clamp_hue(px)
         self.q = np.quantile(self.sorted, np.linspace(0, 1, 257))
         self.q = np.maximum.accumulate(self.q + np.linspace(0, 1e-3, 257))
+
+    def _clamp_hue(self, px, spread=12):
+        """Keep every ramp entry in the colour's hue family (dark edges of the painted
+        blocks pick up the purple background, which would tint recoloured shadows)."""
+        hsv = cv2.cvtColor(px[None].astype(np.uint8), cv2.COLOR_RGB2HSV)[0]
+        sat = (hsv[:, 1] > 110) & (hsv[:, 2] > 90)
+        h = hsv[sat, 0].astype(np.int16) if sat.any() else hsv[:, 0].astype(np.int16)
+        shifted = (h + 90) % 180
+        h0 = (np.median(shifted) - 90) % 180 if np.std(shifted) < np.std(h) else np.median(h)
+        lut = np.clip(self.lut, 0, 255).astype(np.uint8)[None]
+        lh = cv2.cvtColor(lut, cv2.COLOR_RGB2HSV_FULL)[0].astype(np.float32)
+        h0_full = h0 * 256.0 / 180.0
+        d = (lh[:, 0] - h0_full + 128) % 256 - 128
+        lim = spread * 256.0 / 180.0
+        lh[:, 0] = (h0_full + np.clip(d, -lim, lim)) % 256
+        self.lut = cv2.cvtColor(lh[None].round().astype(np.uint8), cv2.COLOR_HSV2RGB_FULL)[0].astype(np.float32)
 
     def rank(self, L):
         return np.interp(L, self.q, np.linspace(0, 1, 257))
@@ -101,14 +118,23 @@ def _gauss(r, s):
     return k / k.sum()
 
 
-def recolour(rgb, src, dst, smooth=True):
+def recolour(rgb, src, dst, smooth=True, own=None, own_weight=0.6):
+    """Map rgb onto dst's shading ramp by luminance rank.
+
+    `src` is the ramp of the colour the pixels are painted in. With `own` (the
+    block's own ramp) the rank is mostly relative to the block itself, so a block
+    painted in deep shadow still lands in the middle of the new colour's ramp.
+    """
     L = lum(rgb)
     if smooth:
         # Flatten broad lighting blotches (keeps edges and the engraved symbol).
         L = cv2.bilateralFilter(L.astype(np.float32), 5, 12, 3)
         base = cv2.GaussianBlur(L, (0, 0), 6)
         L = base.mean() + 0.65 * (base - base.mean()) + (L - base)
-    out = np.clip(dst.colour(dst.at_rank(src.rank(L))), 0, 255).astype(np.uint8)
+    p = src.rank(L)
+    if own is not None:
+        p = own_weight * own.rank(L) + (1 - own_weight) * p
+    out = np.clip(dst.colour(dst.at_rank(p)), 0, 255).astype(np.uint8)
     return out
 
 
@@ -149,6 +175,56 @@ def render_chevron(glow_rgb, scale=2, pad=14):
     return np.dstack([np.clip(rgb * 255, 0, 255), a * 255]).astype(np.uint8)
 
 
+def hue_dist(h, h0):
+    d = np.abs(h.astype(np.int16) - int(h0))
+    return np.minimum(d, 180 - d)
+
+
+def block_hue(img, sel):
+    """Median hue of a block's saturated pixels (circular, via the dominant half)."""
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    h = hsv[..., 0][sel]
+    s = hsv[..., 1][sel]
+    v = hsv[..., 2][sel]
+    h = h[(s > 110) & (v > 90)].astype(np.int16)
+    if len(h) == 0:
+        return 0
+    shifted = (h + 90) % 180  # red straddles 0/180
+    if np.std(shifted) < np.std(h):
+        return int((np.median(shifted) - 90) % 180)
+    return int(np.median(h))
+
+
+def purify(clean, owned, colours, ramps, tol=20):
+    """Re-shade off-hue fragments inside each block in the block's own colour.
+
+    Leftover bits of neighbours, gems and reflections have a clearly different hue.
+    Those pixels keep their brightness (so side faces stay dark and highlights
+    stay bright) but take their colour from the block's shading ramp.
+    """
+    out = clean.copy()
+    hsv = cv2.cvtColor(clean, cv2.COLOR_RGB2HSV)
+    L = lum(clean)
+    purged = {}
+    for bid, col in colours.items():
+        if bid in AMBIGUOUS:
+            continue
+        sel = owned[bid]
+        h0 = block_hue(clean, sel)
+        stray = sel & (hsv[..., 1] > 90) & (hsv[..., 2] > 60) & (hue_dist(hsv[..., 0], h0) > tol)
+        stray = cv2.dilate(stray.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+        stray &= sel
+        purged[bid] = int(stray.sum())
+        if not stray.any():
+            continue
+        ramp = ramps[LOGICAL[col]]
+        fixed = np.clip(ramp.colour(L), 0, 255)
+        soft = cv2.GaussianBlur(stray.astype(np.float32), (0, 0), 1.0)
+        soft = np.where(sel, np.maximum(soft, stray), 0)[..., None]
+        out = (fixed * soft + out * (1 - soft)).round().astype(np.uint8)
+    return out, purged
+
+
 def subtract_rect(r, c):
     """r minus c as a list of disjoint rects (l, t, r, b)."""
     l, t, rr, b = r
@@ -169,12 +245,21 @@ def subtract_rect(r, c):
 
 
 def block_parts():
-    """Each block's visible rects: its rect minus every block drawn after it."""
+    """Each block's visible rects: its rect minus every block that owns the overlap.
+
+    A later block owns an overlap unless layout.OWNS_OVERLAP says otherwise, so
+    every stage pixel belongs to exactly one block.
+    """
+    prec = {b[0]: float(i) for i, b in enumerate(layout.BLOCKS)}
+    for winner, loser in layout.OWNS_OVERLAP:
+        prec[winner] = prec[loser] + 0.5
     parts = {}
-    for i, (bid, l, t, r, b, *_) in enumerate(layout.BLOCKS):
+    for bid, l, t, r, b, *_ in layout.BLOCKS:
         pieces = [(l, t, r, b)]
-        for later in layout.BLOCKS[i + 1:]:
-            pieces = [p for q in pieces for p in subtract_rect(q, later[1:5])]
+        for other in layout.BLOCKS:
+            if prec[other[0]] <= prec[bid]:
+                continue
+            pieces = [p for q in pieces for p in subtract_rect(q, other[1:5])]
         parts[bid] = [p for p in pieces if p[2] - p[0] > 0 and p[3] - p[1] > 0]
     return parts
 
@@ -217,20 +302,26 @@ def build(work):
         rr_mask = build_blocks.rounded_rect_mask((h, w), (l, t, r, b), build_blocks.CORNER_R)
         alpha = np.where(owned[bid], rr_mask, alpha)
     ax0, ay0, ax1, ay1 = build_blocks.ATLAS_BOX
-    save_rgba(os.path.join(OUT, "blocks_ref.png"), clean[ay0:ay1, ax0:ax1], alpha[ay0:ay1, ax0:ax1])
 
     ramps = {c: Ramp(np.concatenate([block_pixels(clean, b, rects) for b in pool]))
              for c, pool in RAMP_POOL.items()}
+    clean, purged = purify(clean, owned, colours, ramps)
+    print("purified off-hue pixels:", {k: v for k, v in purged.items() if v})
+    # Re-learn the ramps from the purified blocks so fragments don't tint the recolours.
+    ramps = {c: Ramp(np.concatenate([block_pixels(clean, b, rects) for b in pool]))
+             for c, pool in RAMP_POOL.items()}
+    save_rgba(os.path.join(OUT, "blocks_ref.png"), clean[ay0:ay1, ax0:ax1], alpha[ay0:ay1, ax0:ax1])
     src_ramps = {}
     for bid, col in colours.items():
         pool = RAMP_POOL.get(col) if bid not in AMBIGUOUS else None
         src_ramps[bid] = ramps[col] if pool else Ramp(block_pixels(clean, bid, rects))
+    own_ramps = {bid: Ramp(clean[owned[bid]]) for bid in colours}
     for c in CYCLE:
         atlas = clean.copy()
         for bid, l, t, r, b, *_ in layout.BLOCKS:
             if LOGICAL[colours[bid]] == c and bid not in AMBIGUOUS:
                 continue
-            rec = recolour(clean[t:b, l:r], src_ramps[bid], ramps[c])
+            rec = recolour(clean[t:b, l:r], src_ramps[bid], ramps[c], own=own_ramps[bid])
             sel = owned[bid][t:b, l:r]
             atlas[t:b, l:r][sel] = rec[sel]
         save_rgba(os.path.join(OUT, f"blocks_{c}.png"), atlas[ay0:ay1, ax0:ax1], alpha[ay0:ay1, ax0:ax1])
@@ -338,7 +429,9 @@ def build(work):
         else:
             hb = hsvb.copy().astype(np.int16)
             blue = (hb[..., 0] >= 80) & (hb[..., 0] <= 130)
-            hb[..., 0] = np.where(blue, (BALL_HUE[c] + (hb[..., 0] - 106)) % 180, hb[..., 0])
+            # Compress the blue ball's hue spread (cyan core, deep-blue shell) so the
+            # glowing core reads as the target colour, not its neighbour.
+            hb[..., 0] = np.where(blue, np.round(BALL_HUE[c] + (hb[..., 0] - 106) * 0.25) % 180, hb[..., 0])
             if c == "yellow":
                 # a golden shell: amber in the shadows, bright yellow in the core
                 hb[..., 0] = np.where(blue, 12 + hb[..., 2] * 14 // 255, hb[..., 0])

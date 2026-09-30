@@ -43,6 +43,10 @@ BLOCKS = [
     ("b31", 727, 764, 818, 862, "cyan", "sparkle"),
 ]
 
+# Where two measured rects overlap, the block listed later owns the overlap, except
+# for these pairs: the painted strip there is the first block's bottom edge.
+OWNS_OVERLAP = [("b20", "b28"), ("b18", "b24")]
+
 # Shards and light streaks from the painted explosion that sit on top of blocks.
 # These are inpainted off the block art so a surviving block does not keep a
 # frozen shard on it; the frame-0 effect layer puts them back for the opening frame.
@@ -55,10 +59,29 @@ BLOCK_TOUCHUPS = [
     ("rect", 332, 552, 351, 574),   # b10 spark streak
     ("rect", 714, 459, 736, 479),   # b14 corner gem
     ("rect", 290, 603, 308, 652),   # b22 side face gem
-    ("line", 597, 741, 680, 694, 13),  # b28 light ray
     ("rect", 695, 580, 714, 636),   # b26/b27 left face: blue gem edge
-    ("rect", 606, 747, 632, 765),   # b28 corner sparkle
     ("rect", 637, 816, 670, 840),   # b30 light ray
+]
+
+# Thin streaks over flat block faces: filled with a smooth (Telea) fill, which keeps
+# the face's gradient instead of LaMa's texture. Same shapes as BLOCK_TOUCHUPS.
+SMOOTH_TOUCHUPS = [
+    ("line", 598, 742, 648, 713, 11),  # b28 light ray across the face (left of the heart)
+    ("rect", 603, 744, 634, 766),   # b28 corner sparkle
+    ("line", 636, 806, 661, 815, 6),   # b30 glint
+]
+
+# Small regions where a painted sparkle sits on a symbol outline: only the white,
+# unsaturated sparkle pixels are filled (Telea), leaving the outline intact.
+DESPARKLE_RECTS = [
+    (656, 693, 690, 718),  # b28 heart cleft
+    (694, 537, 712, 552),  # b26 top-left corner gem edge
+]
+
+# Symmetric symbols damaged on one side: (dest rect, mirror axis x). The dest is
+# replaced by its horizontal mirror image about the axis (auto-refined +-3 px).
+BLOCK_MIRRORS = [
+    ((642, 690, 670, 748), 669.5),  # b28 heart: rebuild the left lobe from the right
 ]
 
 # Copy a clean region over a spot hidden by a neighbour: (dest rect, source top-left).

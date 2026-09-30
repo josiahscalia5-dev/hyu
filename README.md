@@ -38,8 +38,9 @@ edges.
    colour along a fixed cycle:
    **blue → purple → pink → red → yellow → blue**. Changed blocks spin into
    their new colour and keep a swirl badge until the next shift.
-4. The next ball loads in the colour of the biggest group on the board. Tap
-   the ball to switch to any other colour still on the board.
+4. The next ball loads in the colour of the biggest group the ball can
+   actually reach from the launcher, straight or off a wall. Tap the ball to
+   switch to any other colour still on the board.
 5. A ball that hits a different colour bounces off, so bank shots work. If it
    rolls back to the launcher the shot is a miss and the combo resets.
 6. Clear every block before the timer runs out.
@@ -75,8 +76,42 @@ Stars are earned at 1,000, 1,500 and 4,000 points. Clearing the board adds
 
 ```
 ./gradlew :app:assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest    # rules, full playthrough, screenshots
+./gradlew :app:testDebugUnitTest    # rules, playthroughs, screenshots, frame-0 fidelity
+python3 tools/assets/check_assets.py  # art QA: colours, fragments, holes, overlaps
 ```
+
+### End-to-end checklist (real app, real touches)
+
+`app/src/sharedTest/.../e2e/Level5Checklist.kt` plays the whole level through the
+real `MainActivity` and `GameView`: it drags to aim, releases to shoot, and taps
+the ball to switch colour. After every shot it checks:
+
+- **Clears:** the matching group is cleared.
+- **Shifts:** every touching block stepped exactly one colour, and every other
+  block kept its colour.
+- **Next ball:** it is reachable and correctly chosen.
+- **HUD:** score, combo, coins, stars and timer match the rules exactly.
+- **The screen:** screenshots are read back. Every live block and the ball must
+  show their colour, and every cleared block's area must match the temple
+  background (no leftover fragments).
+
+The run ends on Level Complete and taps to restart.
+
+It runs two ways:
+
+- `AppEndToEndTest` (Robolectric, runs in `testDebugUnitTest`).
+- `DeviceEndToEndTest` on a phone or emulator:
+
+  ```
+  ./gradlew :app:installDebug :app:installDebugAndroidTest
+  adb shell am instrument -w -e class com.islandblast.game.DeviceEndToEndTest \
+      com.islandblast.game.test/androidx.test.runner.AndroidJUnitRunner
+  adb pull /sdcard/Android/data/com.islandblast.game/files/e2e   # screenshots + report
+  ```
+
+The harness holds the game clock while it computes shots and reads screenshots
+(on a slow emulator that takes far longer than a player would). The clock runs
+for the aiming pause, the ball's flight, the clear and its effects.
 
 The tests run the real game code headless (Robolectric native graphics):
 

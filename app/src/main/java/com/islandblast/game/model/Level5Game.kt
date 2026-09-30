@@ -99,6 +99,10 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
     var lastTimeBonusAt = -10f
         private set
 
+    /** Game time of the most recent successful clear (drives the combo pop). */
+    var lastClearAt = -10f
+        private set
+
     private var shotTime = 0f
     private var carry = 0f
     private var resolveAt = 0f
@@ -119,8 +123,11 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
         (DEPTH_MIN + (1f - DEPTH_MIN) * (y - DEPTH_TOP) / (spec.ballY - DEPTH_TOP)).coerceIn(DEPTH_MIN, 1f)
 
     fun update(dt: Float) {
-        if (paused || over) return
+        if (paused) return
+        // Game time keeps running after the level ends so the win/lose effects play out;
+        // the countdown and the rules stop.
         time += dt
+        if (over) return
         timeLeft -= dt
         when (phase) {
             Phase.FLYING, Phase.RETURNING -> stepBall(dt)
@@ -333,6 +340,7 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
     private fun hitGroup(block: Int, x: Float, y: Float) {
         val group = board.group(block)
         pendingShift = board.clear(group, time)
+        lastClearAt = time
         combo += 1
         clears++
         score += rules.pointsPerBlock * group.size * combo
@@ -364,11 +372,47 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
             events += GameEvent.Won
             return
         }
-        color = board.bestColor(prefer = color.next()) ?: color
+        color = nextColor(prefer = color.next())
         resetBall()
         ball.loadedAt = time
         phase = Phase.READY
         events += GameEvent.Loaded(color, switched = false)
+    }
+
+    /**
+     * Colour for the next ball: the biggest group the player can actually hit from
+     * the launcher (straight or off a wall), ties going to [prefer]. Falls back to
+     * the biggest group anywhere if nothing is reachable.
+     */
+    fun nextColor(prefer: GameColor): GameColor {
+        val reachable = reachableBlocks()
+        var best: GameColor? = null
+        var bestSize = 0
+        val order = GameColor.entries.sortedBy { if (it == prefer) -1 else it.ordinal }
+        for (c in order) {
+            val size = reachable.filter { board.blocks[it].color == c }
+                .maxOfOrNull { board.group(it).size } ?: continue
+            if (size > bestSize) {
+                bestSize = size
+                best = c
+            }
+        }
+        return best ?: board.bestColor(prefer) ?: color
+    }
+
+    /** Blocks the ball can reach first, over the whole aiming arc. */
+    fun reachableBlocks(stepDeg: Float = 1f): Set<Int> {
+        val saved = aimAngle
+        val out = HashSet<Int>()
+        var a = -rules.maxAimDegrees
+        while (a <= rules.maxAimDegrees + 1e-3f) {
+            aimAngle = (a * PI / 180.0).toFloat()
+            val hit = aimPath().hit
+            if (hit >= 0) out += hit
+            a += stepDeg
+        }
+        aimAngle = saved
+        return out
     }
 
     private fun resetBall() {
