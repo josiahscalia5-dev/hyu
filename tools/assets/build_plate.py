@@ -94,8 +94,40 @@ def extend(plate):
     seed = padded.copy()
     seed[m > 0] = up[m > 0]
     inner = cv2.erode(m, np.ones((49, 49), np.uint8))
-    out = lama.inpaint(seed, cv2.subtract(m, inner))
+    out = lama.inpaint(seed, cv2.subtract(m, inner)).astype(np.float32)
+    out = match_edge_tone(out, plate, m)
     out[EXT_Y:EXT_Y + h, EXT_X:EXT_X + w] = plate
+    return out.round().clip(0, 255).astype(np.uint8)
+
+
+def match_edge_tone(out, plate, m, strip=48, sigma=40.0):
+    """Outpainting darkens with distance; restore the scene's tone in the margins.
+
+    Each side's margin gets a per-row (or per-column) colour gain that matches the
+    real scene's outer strip, blended in with distance so the seam is untouched.
+    """
+    h, w = plate.shape[:2]
+    ph, pw = out.shape[:2]
+
+    def gain(edge_mean, margin_mean):
+        g = (edge_mean + 4.0) / (margin_mean + 4.0)
+        return np.clip(cv2.GaussianBlur(g[:, None, :], (0, 0), sigma)[:, 0, :], 1.0, 2.2)
+
+    ramp_x = np.clip(np.abs(np.arange(pw) - (EXT_X + w / 2)) - w / 2, 0, None)[None, :] / 60.0
+    ramp_y = np.clip(np.abs(np.arange(ph) - (EXT_Y + h / 2)) - h / 2, 0, None)[:, None] / 60.0
+    rows = slice(EXT_Y, EXT_Y + h)
+    for side, sl_edge, sl_margin in (("L", slice(0, strip), slice(0, EXT_X)),
+                                     ("R", slice(w - strip, w), slice(EXT_X + w, pw))):
+        g = gain(plate[:, sl_edge].mean(axis=1), out[rows, sl_margin].mean(axis=1))
+        k = np.clip(ramp_x[:, sl_margin], 0, 1)[..., None]
+        out[rows, sl_margin] *= 1 + (g[:, None, :] - 1) * k
+    cols = slice(0, pw)
+    for side, sl_edge, sl_margin in (("T", slice(0, strip), slice(0, EXT_Y)),
+                                     ("B", slice(h - strip, h), slice(EXT_Y + h, ph))):
+        edge = np.pad(plate[sl_edge].mean(axis=0), ((EXT_X, EXT_X), (0, 0)), mode="edge")
+        g = gain(edge, out[sl_margin, cols].mean(axis=0))
+        k = np.clip(ramp_y[sl_margin], 0, 1)[..., None]
+        out[sl_margin, cols] *= 1 + (g[None, :, :] - 1) * k
     return out
 
 
