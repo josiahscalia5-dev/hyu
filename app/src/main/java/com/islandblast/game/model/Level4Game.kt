@@ -21,7 +21,7 @@ class Rules4(
     val timeBonusPerHit: Float = 0.4f,
     /** Extra seconds a barrel is worth. */
     val barrelTimeBonus: Float = 3f,
-    val starThresholds: IntArray = intArrayOf(600, 1200, 6000),
+    val starThresholds: IntArray = intArrayOf(600, 1200, 8000),
     val clearBonusPerSecond: Int = 20,
     val introSeconds: Float = 1.0f,
     val boltSpeed: Float = 2000f,
@@ -31,7 +31,9 @@ class Rules4(
     val reloadDelay: Float = 0.35f,
     /** Hover amplitude of the treasure, in stage pixels. */
     val hover: Float = 4f,
-    val maxTurnDegrees: Float = 80f,
+    /** How far the hilt turns from its painted pose: counter-clockwise (toward pointing left) and clockwise. */
+    val maxTurnLeft: Float = 40f,
+    val maxTurnRight: Float = 85f,
     /** The aim point stays at least this far above the launcher tip. */
     val minRise: Float = 60f,
 ) {
@@ -103,9 +105,13 @@ class BoltPath(val x0: Float, val y0: Float, val cx: Float, val cy: Float, val x
 
 class Bolt(val path: BoltPath, val firedAt: Float) {
     var dist = 0f
+    internal var carry = 0f
+    internal var steps = 0
     /** Where the bolt ends: the path's end, or the chest that stopped it. */
     var end = path.length
     var done = false
+    /** Game time the bolt stopped (its trail then shrinks into the end point). */
+    var doneAt = -1f
 }
 
 /** What the aim guide shows: the curve and the treasure it will harvest, in order. */
@@ -170,14 +176,17 @@ class Level4Game(val spec: Level4Spec, val rules: Rules4 = Rules4()) {
 
     // ---- motion ----------------------------------------------------------------
 
-    /** Hover offset of [t] at the current time: (dx, dy, degrees). */
-    fun hover(t: Treasure, out: FloatArray = FloatArray(3)): FloatArray {
-        val ramp = (time / rules.introSeconds).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
+    /** Hover offset of [t] now: (dx, dy, degrees). */
+    fun hover(t: Treasure, out: FloatArray = FloatArray(3)): FloatArray = hoverAt(t, time, out)
+
+    /** Hover offset of [t] at game time [at]; zero at t = 0, easing in over the intro. */
+    fun hoverAt(t: Treasure, at: Float, out: FloatArray = FloatArray(3)): FloatArray {
+        val ramp = (at / rules.introSeconds).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
         val a = rules.hover * ramp
         val w = t.freq
-        out[0] = a * 0.5f * sin(0.7f * w * time) * t.sign
-        out[1] = a * sin(w * time) * t.sign
-        if (out.size > 2) out[2] = 1.6f * ramp * sin(0.8f * w * time) * t.sign
+        out[0] = a * 0.5f * sin(0.7f * w * at) * t.sign
+        out[1] = a * sin(w * at) * t.sign
+        if (out.size > 2) out[2] = 1.6f * ramp * sin(0.8f * w * at) * t.sign
         return out
     }
 
@@ -204,27 +213,27 @@ class Level4Game(val spec: Level4Spec, val rules: Rules4 = Rules4()) {
         return true
     }
 
-    /** The curve a shot at the current aim would take, and what it would harvest. */
+    /**
+     * The curve a shot fired now would take, and what it would harvest: the bolt is
+     * stepped exactly as a real shot steps it, against where each piece will have
+     * bobbed to by the time the bolt gets there.
+     */
     fun aimPreview(): AimPreview {
         val path = pathTo(aimX, aimY)
         val hits = ArrayList<Int>()
-        var end = path.length
-        var d = 0f
         val seen = HashSet<Int>()
-        while (d < path.length) {
-            path.at(d, p)
-            val t = touching(p[0], p[1], seen)
+        var k = 1
+        while (k * STEP <= path.length) {
+            val d = k * STEP
+            val t = probe(path, time, d, seen)
             if (t != null) {
                 hits += t.index
                 seen += t.index
-                if (t.spec.kind == TargetKind.CHEST) {
-                    end = d
-                    break
-                }
+                if (t.spec.kind == TargetKind.CHEST) return AimPreview(path, hits, d)
             }
-            d += STEP
+            k++
         }
-        return AimPreview(path, hits, end)
+        return AimPreview(path, hits, path.length)
     }
 
     // ---- simulation -------------------------------------------------------------
@@ -245,23 +254,30 @@ class Level4Game(val spec: Level4Spec, val rules: Rules4 = Rules4()) {
 
     private fun fly(dt: Float) {
         val b = bolt ?: return
-        var left = rules.boltSpeed * dt
-        while (left > 0f && !b.done) {
-            val step = min(left, STEP)
-            b.dist += step
-            left -= step
-            b.path.at(b.dist, p)
-            val t = touching(p[0], p[1], hitThisShot)
+        // Whole steps only, the same ones aimPreview() takes, so the guide never lies.
+        b.carry += rules.boltSpeed * dt
+        while (b.carry >= STEP && !b.done) {
+            b.carry -= STEP
+            b.steps++
+            val d = b.steps * STEP
+            if (d > b.path.length) {
+                b.dist = b.path.length
+                b.done = true
+                break
+            }
+            b.dist = d
+            val t = probe(b.path, b.firedAt, d, hitThisShot)
             if (t != null) {
+                b.path.at(d, p)
                 harvest(t, p[0], p[1])
                 if (t.spec.kind == TargetKind.CHEST) {
-                    b.end = b.dist
+                    b.end = d
                     b.done = true
                 }
             }
-            if (b.dist >= b.path.length) b.done = true
         }
         if (b.done) {
+            b.doneAt = time
             phase = Phase.RESOLVING
             resolveAt = time + rules.reloadDelay
         }
@@ -355,7 +371,7 @@ class Level4Game(val spec: Level4Spec, val rules: Rules4 = Rules4()) {
             var a = (atan2(c.cy - tip[1], c.cx - tip[0]) - restAngle) / DEG
             while (a > 180f) a -= 360f
             while (a < -180f) a += 360f
-            turn = a.coerceIn(-rules.maxTurnDegrees, rules.maxTurnDegrees)
+            turn = a.coerceIn(-rules.maxTurnLeft, rules.maxTurnRight)
         }
         return turn
     }
@@ -365,15 +381,21 @@ class Level4Game(val spec: Level4Spec, val rules: Rules4 = Rules4()) {
         return curve(tip[0], tip[1], x, y)
     }
 
-    /** First live treasure (not in [skip]) the bolt at (x, y) touches. */
-    private fun touching(x: Float, y: Float, skip: Set<Int>): Treasure? {
+    /** Treasure the bolt [d] along [path] touches, for a shot fired at [firedAt]. */
+    private fun probe(path: BoltPath, firedAt: Float, d: Float, skip: Set<Int>): Treasure? {
+        path.at(d, p)
+        return touching(p[0], p[1], firedAt + d / rules.boltSpeed, skip)
+    }
+
+    /** First live treasure (not in [skip]) the bolt at (x, y) touches at game time [at]. */
+    private fun touching(x: Float, y: Float, at: Float, skip: Set<Int>): Treasure? {
         val o = FloatArray(3)
         var best: Treasure? = null
         var bestD = Float.MAX_VALUE
         for (t in treasures) {
             if (!t.alive || t.index in skip) continue
             val s = t.spec
-            hover(t, o)
+            hoverAt(t, at, o)
             val lx = x - o[0]
             val ly = y - o[1]
             if (hypot(lx - s.cx, ly - s.cy) > s.radius * 2f + rules.boltRadius + 20f) continue

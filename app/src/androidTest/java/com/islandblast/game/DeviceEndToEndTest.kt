@@ -48,7 +48,8 @@ class DeviceEndToEndTest {
     @Test
     fun playLevel5OnDevice() {
         val target = inst.targetContext
-        target.startActivity(Intent(target, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        target.startActivity(Intent(target, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(MainActivity.EXTRA_LEVEL, 5))
         val deadline = SystemClock.uptimeMillis() + 120_000
         while (activity == null) {
             check(SystemClock.uptimeMillis() < deadline) { "MainActivity did not resume" }

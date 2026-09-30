@@ -111,6 +111,58 @@ class FullScreenTest {
         File(out, "report.txt").writeText(report.toString())
     }
 
+    @Test
+    fun level4FillsEveryPhoneShapeWithHudInsideTheSafeArea() {
+        val assets4 = TestLevel4.assets
+        val out4 = File(out.parentFile.parentFile, "level4-shots/phones").apply { mkdirs() }
+        val report = StringBuilder()
+        for (p in phones) {
+            val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+            activity.resources.displayMetrics.density = p.density
+            val view = Level4View(activity, assets4)
+            view.measure(
+                View.MeasureSpec.makeMeasureSpec(p.w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(p.h, View.MeasureSpec.EXACTLY),
+            )
+            view.layout(0, 0, p.w, p.h)
+            view.setSafeInsetsForTest(p.inset[0], p.inset[1], p.inset[2], p.inset[3])
+            val bmp = Bitmap.createBitmap(p.w, p.h, Bitmap.Config.ARGB_8888)
+            view.draw(Canvas(bmp))
+            val px = IntArray(p.w * p.h)
+            bmp.getPixels(px, 0, p.w, 0, 0, p.w, p.h)
+            Png.write(File(out4, "${p.name}.png"), p.w, p.h, px)
+
+            // The sky above the sign is legitimately smooth, so only a single flat colour fails.
+            val spreads = ArrayList<String>()
+            for ((edge, pixels) in edges(px, p.w, p.h)) {
+                val dark = pixels.count { Color.red(it) + Color.green(it) + Color.blue(it) < 24 }
+                assertTrue("${p.name}: $edge edge has ${dark * 100 / pixels.size}% black pixels", dark < pixels.size * 4 / 10)
+                assertTrue("${p.name}: $edge edge looks like a flat bar", spread(pixels) > 10)
+                spreads += "$edge ${spread(pixels)}"
+            }
+            val safe = view.safeRect
+            val hud = assets4.spec.hud
+            val items = mapOf(
+                "pause" to hud.pause, "sign+stars" to Box(290f, 60f, 650f, 226f), "timer" to Box(748f, 36f, 934f, 120f),
+                "score" to Box(33f, 216f, 245f, 354f), "combo" to hud.comboBox, "time bar" to Box(60f, 1422f, 874f, 1584f),
+            )
+            for ((name, b) in items) {
+                val tl = view.stageToView(b.l, b.t)
+                val br = view.stageToView(b.r, b.b)
+                assertTrue("${p.name}: $name ($tl..$br) outside safe area $safe",
+                    tl.x >= safe.left - 0.5f && tl.y >= safe.top - 0.5f && br.x <= safe.right + 0.5f && br.y <= safe.bottom + 0.5f)
+            }
+            val scale = view.stageRect.width() / assets4.spec.stageW
+            val gemMm = assets4.spec.targets.minOf { 2 * it.radius } * scale / (p.density * 160f) * 25.4f
+            report.appendLine("%-22s scale %.3f  stage %s  smallest treasure %.1f mm  edge spread %s".format(
+                p.name, scale, view.stageRect.toShortString(), gemMm, spreads))
+            assertTrue("${p.name}: game spans only ${view.stageRect.width() / p.w} of the screen width",
+                view.stageRect.width() >= 0.9f * p.w)
+        }
+        println(report)
+        File(out4, "report.txt").writeText(report.toString())
+    }
+
     private fun edges(px: IntArray, w: Int, h: Int): Map<String, List<Int>> = mapOf(
         "top" to (0 until w).map { px[it] },
         "bottom" to (0 until w).map { px[(h - 1) * w + it] },

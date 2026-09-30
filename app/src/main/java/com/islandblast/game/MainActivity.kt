@@ -6,9 +6,14 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import com.islandblast.game.render.Assets
+import com.islandblast.game.render.Level4Assets
 
+/**
+ * Opens Level 4 "Mystic Harvest"; its Level Complete card leads on to Level 5.
+ * Start with the extra [EXTRA_LEVEL] = 5 to open Level 5 directly.
+ */
 class MainActivity : Activity() {
-    private lateinit var view: GameView
+    private lateinit var view: StageView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,9 +28,20 @@ class MainActivity : Activity() {
                 }
             }
         }
-        view = GameView(this, Assets(assets))
-        setContentView(view)
+        showLevel(intent.getIntExtra(EXTRA_LEVEL, 4))
         hideSystemBars()
+    }
+
+    private fun showLevel(level: Int) {
+        if (::view.isInitialized) view.stop()
+        view = if (level == 5) {
+            GameView(this, Assets(assets))
+        } else {
+            Level4View(this, Level4Assets(assets)).apply { onNextLevel = { showLevel(5) } }
+        }
+        setContentView(view)
+        view.requestApplyInsets()
+        view.start()
     }
 
     override fun onResume() {
@@ -35,7 +51,10 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
-        view.pauseGame()
+        when (val v = view) {
+            is GameView -> v.pauseGame()
+            is Level4View -> v.pauseGame()
+        }
         view.stop()
         super.onPause()
     }
@@ -57,5 +76,10 @@ class MainActivity : Activity() {
                     android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 )
         }
+    }
+
+    companion object {
+        /** Which level to open (4 or 5); Level 4 by default. */
+        const val EXTRA_LEVEL = "level"
     }
 }

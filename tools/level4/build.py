@@ -92,14 +92,39 @@ def text_mask(ref, box, kind):
     if kind == "white":
         m = (lum > 170) & (hsv[..., 1] < 90)
         grow = 7
-    else:  # gold lettering with a chunky dark outline
-        m = (hsv[..., 0] >= 10) & (hsv[..., 0] <= 40) & (hsv[..., 1] > 80) & (hsv[..., 2] > 170)
-        grow = 18
+    else:  # gold lettering with a chunky dark outline and drop shadow
+        gold = (hsv[..., 0] >= 5) & (hsv[..., 0] <= 40) & (hsv[..., 1] > 80) & (hsv[..., 2] > 150)
+        g8 = gold.astype(np.uint8)
+        near = cv2.dilate(g8, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (41, 41))) > 0
+        outline = near & (hsv[..., 2] < 120) & ((hsv[..., 0] <= 25) | (hsv[..., 0] >= 170))
+        m = gold | outline
+        grow = 9
     out = np.zeros((H, W), np.uint8)
     out[t:b, l:r] = m[t:b, l:r]
     k = 2 * grow + 1
     out = cv2.dilate(out * 255, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
     return out > 0
+
+
+def hud_masks(ref):
+    """The live HUD values as painted: removed from the plate, kept as sprites."""
+    return {
+        "timer": text_mask(ref, layout.TIMER_DIGITS, "white"),
+        "score": rect_mask([layout.SCORE_DIGITS]),
+        "combo": text_mask(ref, layout.COMBO_BOX, "gold"),
+    }
+
+
+def painted_text(ref):
+    """Sprites of the painted "0:28", "1,240" and "Combo x8": the app shows them while
+    the values are the painted ones, so the opening screen is the approved one exactly."""
+    out = {}
+    for key, m in hud_masks(ref).items():
+        ys, xs = np.nonzero(m)
+        l, t, r, b = int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+        save_rgba(os.path.join(OUT, f"painted_{key}.png"), ref[t:b, l:r], soft(m)[t:b, l:r])
+        out[key] = [l, t, r, b]
+    return out
 
 
 # ---- plate --------------------------------------------------------------------
@@ -147,8 +172,9 @@ def build_plate(ref, objects, work):
         fill |= m
     fill = cv2.dilate(fill.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))) > 0
     boom = explosion_mask(ref, objects)
-    hud = text_mask(ref, layout.TIMER_DIGITS, "white") | rect_mask([layout.SCORE_DIGITS]) \
-        | text_mask(ref, layout.COMBO_BOX, "gold")
+    hud = np.zeros((H, W), bool)
+    for m in hud_masks(ref).values():
+        hud |= m
     hole = fill | boom | hud
     h8 = hole.astype(np.uint8) * 255
     plate = lama.inpaint(ref, h8)
@@ -248,15 +274,15 @@ def sprites(ref, objects):
 def star_gold(ref):
     l, t, r, b = layout.STAR_BOXES[0]
     hsv = cv2.cvtColor(ref[t:b, l:r], cv2.COLOR_RGB2HSV)
-    gold = (hsv[..., 0] >= 15) & (hsv[..., 0] <= 38) & (hsv[..., 1] > 90) & (hsv[..., 2] > 150)
-    dark = hsv[..., 2] < 80
-    m = (gold | dark).astype(np.uint8) * 255
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
-    m = (lab == 1 + int(np.argmax(st[1:, 4]))).astype(np.uint8) * 255
-    ff = m.copy()
-    cv2.floodFill(ff, np.zeros((m.shape[0] + 2, m.shape[1] + 2), np.uint8), (0, 0), 255)
-    m = cv2.dilate(m | cv2.bitwise_not(ff), np.ones((3, 3), np.uint8))
+    gold = ((hsv[..., 0] >= 12) & (hsv[..., 0] <= 40) & (hsv[..., 1] > 90) & (hsv[..., 2] > 150)).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(gold, 8)
+    star = (lab == 1 + int(np.argmax(st[1:, 4]))).astype(np.uint8) * 255
+    ff = star.copy()
+    cv2.floodFill(ff, np.zeros((star.shape[0] + 2, star.shape[1] + 2), np.uint8), (0, 0), 255)
+    star |= cv2.bitwise_not(ff)
+    # Its thin dark outline only: dark pixels hugging the gold, not the wood around it.
+    ring = cv2.dilate(star, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)))
+    m = star | (ring & ((hsv[..., 2] < 110).astype(np.uint8) * 255))
     save_rgba(os.path.join(OUT, "star_gold.png"), ref[t:b, l:r], cv2.GaussianBlur(m, (0, 0), 0.8))
 
 
@@ -421,6 +447,7 @@ def build(work):
     star_gold(ref)
     fill_box = bar_fill(ref)
     fx_box, pieces = intro_fx(ref, plate, hole, objects)
+    painted = painted_text(ref)
     text = fit_text(ref)
     for k, v in text.items():
         print("text", k, v)
@@ -438,6 +465,7 @@ def build(work):
             "timeBarFill": fill_box,
             "comboBox": list(layout.COMBO_BOX),
             "extent": list(layout.HUD_EXTENT),
+            "painted": painted,
             "text": {k: {kk: v[kk] for kk in ("size", "x", "y", "angle", "scaleX", "width")}
                      for k, v in text.items()},
         },

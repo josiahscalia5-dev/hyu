@@ -33,6 +33,8 @@ class Hud4(
     val score: TextSpot,
     val combo: TextSpot,
     val comboNumber: TextSpot,
+    /** Where the painted "0:28", "1,240" and "Combo x8" sprites sit (keys timer/score/combo). */
+    val painted: Map<String, Box>,
 )
 
 /**
@@ -104,6 +106,9 @@ class Level4Spec(
                     score = text.getJSONObject("score").spot(),
                     combo = text.getJSONObject("combo").spot(),
                     comboNumber = text.getJSONObject("comboNumber").spot(),
+                    painted = h.getJSONObject("painted").let { pj ->
+                        pj.keys().asSequence().associateWith { pj.getJSONArray(it).box() }
+                    },
                 ),
             )
         }

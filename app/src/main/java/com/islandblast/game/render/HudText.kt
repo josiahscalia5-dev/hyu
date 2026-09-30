@@ -14,9 +14,10 @@ import com.islandblast.game.model.TextSpot
 class HudText(private val typeface: Typeface) {
     private val text = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG)
 
+    /** [outline] scales the dark outline and drop shadow (1 = the Level 5 weight). */
     fun white(
         c: Canvas, s: String, x: Float, y: Float, size: Float, color: Int,
-        align: Paint.Align = Paint.Align.LEFT, scaleX: Float = 1f,
+        align: Paint.Align = Paint.Align.LEFT, scaleX: Float = 1f, outline: Float = 1f,
     ) {
         text.typeface = typeface
         text.textSize = size
@@ -25,10 +26,10 @@ class HudText(private val typeface: Typeface) {
         text.shader = null
         text.style = Paint.Style.FILL_AND_STROKE
         text.strokeJoin = Paint.Join.ROUND
-        text.strokeWidth = size * 0.16f
+        text.strokeWidth = size * 0.16f * outline
         text.color = 0x99000000.toInt()
-        c.drawText(s, x, y + size * 0.05f, text)
-        text.strokeWidth = size * 0.1f
+        c.drawText(s, x, y + size * 0.05f * outline, text)
+        text.strokeWidth = size * 0.1f * outline
         text.color = 0xFF14080A.toInt()
         c.drawText(s, x, y, text)
         text.strokeWidth = size * 0.025f
@@ -39,7 +40,7 @@ class HudText(private val typeface: Typeface) {
     }
 
     /** Score digits as the references paint them: cream-to-gold fill with a dark outline. */
-    fun cream(c: Canvas, s: String, spot: TextSpot) {
+    fun cream(c: Canvas, s: String, spot: TextSpot, outline: Float = 1f) {
         val size = spot.size
         text.typeface = typeface
         text.textSize = size
@@ -48,10 +49,10 @@ class HudText(private val typeface: Typeface) {
         text.shader = null
         text.strokeJoin = Paint.Join.ROUND
         text.style = Paint.Style.FILL_AND_STROKE
-        text.strokeWidth = size * 0.17f
+        text.strokeWidth = size * 0.17f * outline
         text.color = 0xFF1A0C06.toInt()
-        c.drawText(s, spot.x, spot.y + size * 0.04f, text)
-        text.strokeWidth = size * 0.11f
+        c.drawText(s, spot.x, spot.y + size * 0.04f * outline, text)
+        text.strokeWidth = size * 0.11f * outline
         text.color = 0xFF2E1608.toInt()
         c.drawText(s, spot.x, spot.y, text)
         text.style = Paint.Style.FILL
