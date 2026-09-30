@@ -47,11 +47,23 @@ object Bot {
         return best
     }
 
-    /** Stage point a finger would drag to for this angle. */
+    /**
+     * Stage point a finger would drag to for this angle: [reach] away from the ball,
+     * pulled in for steep angles so it stays on the screen (a device rejects touches
+     * outside the display).
+     */
     fun aimPoint(game: Level5Game, deg: Float, reach: Float = REACH): Pair<Float, Float> {
         val r = Math.toRadians(deg.toDouble())
-        return (game.spec.ballX + (sin(r) * reach).toFloat()) to (game.spec.ballY - (cos(r) * reach).toFloat())
+        val sx = sin(r).toFloat()
+        val cy = cos(r).toFloat()
+        val s = game.spec
+        var d = reach
+        if (sx > 1e-3f) d = minOf(d, (s.stageW - EDGE - s.ballX) / sx)
+        if (sx < -1e-3f) d = minOf(d, (s.ballX - EDGE) / -sx)
+        return (s.ballX + sx * d) to (s.ballY - cy * d)
     }
+
+    private const val EDGE = 24f
 
     fun aimAtAngle(game: Level5Game, deg: Float) {
         val (x, y) = aimPoint(game, deg)
