@@ -43,7 +43,7 @@ class Renderer(private val assets: Assets) {
     private val addPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeJoin = Paint.Join.ROUND }
-    private val text = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG)
+    private val hudText = HudText(assets.fredoka)
     private val src = Rect()
     private val dst = RectF()
     private val path = Path()
@@ -509,86 +509,14 @@ class Renderer(private val assets: Assets) {
     private fun whiteText(
         c: Canvas, s: String, x: Float, y: Float, size: Float, color: Int,
         align: Paint.Align = Paint.Align.LEFT, scaleX: Float = 1f,
-    ) {
-        text.typeface = assets.fredoka
-        text.textSize = size
-        text.textScaleX = scaleX
-        text.textAlign = align
-        text.shader = null
-        text.style = Paint.Style.FILL_AND_STROKE
-        text.strokeJoin = Paint.Join.ROUND
-        text.strokeWidth = size * 0.16f
-        text.color = 0x99000000.toInt()
-        c.drawText(s, x, y + size * 0.05f, text)
-        text.strokeWidth = size * 0.1f
-        text.color = 0xFF14080A.toInt()
-        c.drawText(s, x, y, text)
-        text.strokeWidth = size * 0.025f
-        text.color = color
-        c.drawText(s, x, y, text)
-        text.style = Paint.Style.FILL
-        text.textScaleX = 1f
-    }
+    ) = hudText.white(c, s, x, y, size, color, align, scaleX)
 
-    /** The reference's score digits: cream-to-gold fill with a dark outline. */
-    private fun creamText(c: Canvas, s: String, spot: TextSpot) {
-        val size = spot.size
-        text.typeface = assets.fredoka
-        text.textSize = size
-        text.textScaleX = spot.scaleX
-        text.textAlign = Paint.Align.LEFT
-        text.shader = null
-        text.strokeJoin = Paint.Join.ROUND
-        text.style = Paint.Style.FILL_AND_STROKE
-        text.strokeWidth = size * 0.17f
-        text.color = 0xFF1A0C06.toInt()
-        c.drawText(s, spot.x, spot.y + size * 0.04f, text)
-        text.strokeWidth = size * 0.11f
-        text.color = 0xFF2E1608.toInt()
-        c.drawText(s, spot.x, spot.y, text)
-        text.style = Paint.Style.FILL
-        text.shader = LinearGradient(0f, spot.y - size * 0.72f, 0f, spot.y, intArrayOf(
-            0xFFFFFDF0.toInt(), 0xFFFFF3B8.toInt(), 0xFFFFDC62.toInt(), 0xFFF3B83A.toInt(),
-        ), floatArrayOf(0f, 0.35f, 0.75f, 1f), Shader.TileMode.CLAMP)
-        c.drawText(s, spot.x, spot.y, text)
-        text.shader = null
-        text.textScaleX = 1f
-    }
+    private fun creamText(c: Canvas, s: String, spot: TextSpot) = hudText.cream(c, s, spot)
 
-    /** Yellow-to-orange fill, thin red rim, chunky brown outline: the reference's "Combo x9" / "+30". */
     private fun goldText(
         c: Canvas, s: String, x: Float, y: Float, size: Float, align: Paint.Align, angle: Float, scaleX: Float = 1f,
         rim: Boolean = true,
-    ) {
-        c.save()
-        if (angle != 0f) c.rotate(angle, x, y)
-        text.typeface = assets.fredoka
-        text.textSize = size
-        text.textScaleX = scaleX
-        text.textAlign = align
-        text.shader = null
-        text.strokeJoin = Paint.Join.ROUND
-        text.style = Paint.Style.FILL_AND_STROKE
-        text.strokeWidth = size * 0.2f
-        text.color = 0xFF2E0E04.toInt()
-        c.drawText(s, x, y + size * 0.04f, text)
-        text.strokeWidth = size * 0.16f
-        text.color = 0xFF4A1A08.toInt()
-        c.drawText(s, x, y, text)
-        if (rim) {
-            text.strokeWidth = size * 0.07f
-            text.color = 0xFFE0321A.toInt()
-            c.drawText(s, x, y, text)
-        }
-        text.style = Paint.Style.FILL
-        text.shader = LinearGradient(0f, y - size * 0.72f, 0f, y, intArrayOf(
-            0xFFFFFBC8.toInt(), 0xFFFFEA3C.toInt(), 0xFFFFD21C.toInt(), 0xFFFFAE08.toInt(),
-        ), floatArrayOf(0f, 0.3f, 0.7f, 1f), Shader.TileMode.CLAMP)
-        c.drawText(s, x, y, text)
-        text.shader = null
-        text.textScaleX = 1f
-        c.restore()
-    }
+    ) = hudText.gold(c, s, x, y, size, align, angle, scaleX, rim)
 
     // ---- Goal panel ------------------------------------------------------------------
 
@@ -673,12 +601,7 @@ class Renderer(private val assets: Assets) {
         whiteText(c, hint, cx, cy + 270f, 38f, Color.WHITE, Paint.Align.CENTER)
     }
 
-    private fun measure(s: String, size: Float): Float {
-        text.typeface = assets.fredoka
-        text.textSize = size
-        text.textAlign = Paint.Align.LEFT
-        return text.measureText(s)
-    }
+    private fun measure(s: String, size: Float): Float = hudText.measure(s, size)
 
     // ---- helpers ---------------------------------------------------------------------
 
