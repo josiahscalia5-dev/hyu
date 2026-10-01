@@ -20,6 +20,9 @@ class StormSpec(json: String) {
     val vanishX: Float
     val laneW: Float
     val depth: Float
+    /** The ski sprite meets the water at this y of its reference box; it is drawn at [skiScale]. */
+    val skiAnchorY: Float
+    val skiScale: Float
     val sprites: Map<String, Box>
     val pause: Box
     val stars: List<Box>
@@ -41,6 +44,7 @@ class StormSpec(json: String) {
         val p = o.getJSONObject("perspective")
         horizon = p.f("horizon"); playerY = p.f("playerY"); vanishX = p.f("vanishX")
         laneW = p.f("laneW"); depth = p.f("depth")
+        skiAnchorY = p.f("skiAnchorY"); skiScale = p.f("skiScale")
         val sp = o.getJSONObject("sprites")
         sprites = sp.keys().asSequence().associateWith { sp.getJSONObject(it).getJSONArray("box").box() }
         val h = o.getJSONObject("hud")
@@ -56,7 +60,15 @@ class StormSpec(json: String) {
     /** Perspective scale of a point [dz] river units ahead of the jet ski (1 at the ski). */
     fun scaleAt(dz: Float) = depth / (depth + dz)
     fun yAt(dz: Float) = horizon + (playerY - horizon) * scaleAt(dz)
-    fun xAt(lanes: Float, dz: Float) = vanishX + lanes * laneW * scaleAt(dz)
+
+    /**
+     * Screen x of a point [lanes] across the river, [dz] ahead, seen by the follow camera
+     * that sits [camLanes] across (it trails the jet ski): near things shift more than far.
+     */
+    fun xAt(lanes: Float, dz: Float, camLanes: Float = 0f) = vanishX + (lanes - camLanes) * laneW * scaleAt(dz)
+
+    /** Lateral position (lanes) under screen x at the jet ski's depth. */
+    fun lanesAtSki(x: Float, camLanes: Float) = (x - vanishX) / laneW + camLanes
 
     private fun JSONObject.f(k: String) = getDouble(k).toFloat()
     private fun JSONArray.box() = Box(getDouble(0).toFloat(), getDouble(1).toFloat(), getDouble(2).toFloat(), getDouble(3).toFloat())

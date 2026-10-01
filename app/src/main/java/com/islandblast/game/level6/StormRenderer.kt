@@ -83,6 +83,7 @@ class StormRenderer(private val assets: StormAssets) {
     private var rnd = Random(66)
     private var sprayCarry = 0f
     private var lastSkiX = 0f
+    private var cam = 0f
 
     /** Pressed state of the arrow buttons (set by the view). */
     var leftPressed = false
@@ -100,7 +101,7 @@ class StormRenderer(private val assets: StormAssets) {
         for (e in game.events) when (e) {
             is StormEvent.Hit -> {
                 val dz = e.z - game.z
-                val x = spec.xAt(e.x, max(dz, 0f))
+                val x = spec.xAt(e.x, max(dz, 0f), camLanes(game))
                 val y = spec.yAt(max(dz, 0f))
                 val w = objectWidth(e.obj.kind, max(dz, 0f))
                 bursts += Burst(e.obj.kind, x, y, w, now, e.shielded)
@@ -122,7 +123,7 @@ class StormRenderer(private val assets: StormAssets) {
             }
             is StormEvent.Coin -> {
                 val dz = max(e.obj.z - game.z, 0f)
-                val x = spec.xAt(e.obj.x, dz)
+                val x = spec.xAt(e.obj.x, dz, camLanes(game))
                 val y = spec.yAt(dz) - objectWidth(Kind.COIN, dz) * 0.6f
                 flyCoins += FlyCoin(x, y, now)
                 popups += Popup("+${game.rules.coinPoints}", x, y - 40f, now, 0)
@@ -197,32 +198,52 @@ class StormRenderer(private val assets: StormAssets) {
     // ---- geometry ---------------------------------------------------------------------
 
     /** Objects shrink with distance a little slower than the river narrows (cartoon depth). */
-    private fun sizeScale(dz: Float) = spec.scaleAt(dz).pow(0.45f)
+    private fun sizeScale(dz: Float) = spec.scaleAt(dz).pow(0.6f)
 
     private fun objectWidth(k: Kind, dz: Float): Float {
         val lanes = when (k) {
             Kind.LOGS -> 1.45f
             Kind.COIN -> 0.5f
             Kind.SHIELD -> 0.62f
-            else -> 2f * k.halfWidth * 1.42f
+            else -> 2f * k.halfWidth * 1.5f
         }
         return lanes * spec.laneW * sizeScale(dz)
     }
 
     private val skiBox get() = spec.sprites.getValue("jetski")
-    fun skiX(game: StormGame) = spec.vanishX + game.x * spec.laneW
+
+    /**
+     * Follow camera: trails the jet ski sideways ([CAM_FOLLOW] of its offset), so the
+     * river slides under it with parallax, and banks a little into turns.
+     */
+    fun camLanes(game: StormGame) = game.x * CAM_FOLLOW
+    private fun camRoll(game: StormGame) = ((game.targetX - game.x) * 2.2f).coerceIn(-1.8f, 1.8f)
+    fun skiX(game: StormGame) = spec.xAt(game.x, 0f, camLanes(game))
+
+    /** The jet ski's drawn rectangle (stage units), at its water contact on the player row. */
+    fun skiRect(game: StormGame): RectF {
+        val b = skiBox
+        val k = spec.skiScale
+        val cx = skiX(game)
+        val bottom = spec.playerY + (b.b - spec.skiAnchorY) * k
+        return RectF(cx - b.w / 2f * k, bottom - b.h * k, cx + b.w / 2f * k, bottom)
+    }
 
     // ---- frame -------------------------------------------------------------------------
 
     fun draw(c: Canvas, game: StormGame) {
         val now = game.time
         val shake = shakeOffset(now)
+        cam = camLanes(game)
         c.save()
         c.translate(shake, shake * 0.6f)
+        c.rotate(camRoll(game), spec.vanishX, spec.playerY)
         drawRiver(c, game)
         drawSky(c, game)
+        drawBanks(c, game, behindSki = false)
         drawObjects(c, game, now, behindSki = false)
         drawFinishGate(c, game)
+        drawBanks(c, game, behindSki = true)
         drawLeaves(c)
         drawObjects(c, game, now, behindSki = true)
         drawSki(c, game, now)
@@ -249,7 +270,7 @@ class StormRenderer(private val assets: StormAssets) {
     // ---- river --------------------------------------------------------------------------
 
     private fun drawRiver(c: Canvas, game: StormGame) {
-        val near = -4.5f
+        val near = -6f
         val far = 95f
         val u = 30f * spec.laneW
         val vk = 90f
@@ -258,9 +279,10 @@ class StormRenderer(private val assets: StormAssets) {
         val src = floatArrayOf(-u, -near * vk, u, -near * vk, u, -far * vk, -u, -far * vk)
         val yN = spec.yAt(near)
         val yF = spec.yAt(far)
+        val camPx = cam * spec.laneW
         val dstPts = floatArrayOf(
-            spec.vanishX - u * sn, yN, spec.vanishX + u * sn, yN,
-            spec.vanishX + u * sf, yF, spec.vanishX - u * sf, yF,
+            spec.vanishX + (-u - camPx) * sn, yN, spec.vanishX + (u - camPx) * sn, yN,
+            spec.vanishX + (u - camPx) * sf, yF, spec.vanishX + (-u - camPx) * sf, yF,
         )
         planeMatrix.setPolyToPoly(src, 0, dstPts, 0, 4)
         val tile = 0.9f * spec.laneW * 1.7f
@@ -292,21 +314,22 @@ class StormRenderer(private val assets: StormAssets) {
         val spacing = when (game.section) { 0 -> 34f; 1 -> 26f; 2 -> 18f; 3 -> 15f; else -> 40f }
         val strength = when (game.section) { 0 -> 0.45f; 1 -> 0.6f; 2 -> 0.85f; 3 -> 0.9f; else -> 0.35f }
         var wz = spacing - (game.z % spacing)
-        while (wz < 70f) {
+        while (wz < VISIBLE_FAR) {
             if (wz > 1.5f) {
                 val s = spec.scaleAt(wz)
                 val y = spec.yAt(wz)
-                val a = (strength * 140f * min(1f, (70f - wz) / 20f)).roundToInt()
+                val a = (strength * 140f * min(1f, (VISIBLE_FAR - wz) / 14f)).roundToInt()
                 stroke.color = Color.WHITE
                 stroke.alpha = a
                 stroke.strokeWidth = 10f * s + 2f
                 path.reset()
-                val half = 2.2f * spec.laneW * s
-                var x = spec.vanishX - half
+                val half = 2.6f * spec.laneW * s
+                val mid = spec.xAt(0f, wz, cam)
+                var x = mid - half
                 path.moveTo(x, y)
                 val seg = 26
                 for (i in 1..seg) {
-                    x = spec.vanishX - half + 2 * half * i / seg
+                    x = mid - half + 2 * half * i / seg
                     path.lineTo(x, y - (sin(i * 1.3f + wz * 0.7f + game.time * 2f) * 7f + 5f) * s)
                 }
                 c.drawPath(path, stroke)
@@ -316,7 +339,7 @@ class StormRenderer(private val assets: StormAssets) {
     }
 
     private fun drawSky(c: Canvas, game: StormGame) {
-        c.drawBitmap(assets.sky, -spec.skyMarginX, -spec.skyMarginY, bmp)
+        c.drawBitmap(assets.sky, -spec.skyMarginX - cam * spec.laneW * 0.06f, -spec.skyMarginY, bmp)
         // The storm calms as the jet ski reaches the temple.
         val calm = calmness(game)
         if (calm > 0f) {
@@ -337,7 +360,7 @@ class StormRenderer(private val assets: StormAssets) {
     private fun drawObjects(c: Canvas, game: StormGame, now: Float, behindSki: Boolean) {
         val visible = game.objects.filter {
             val dz = it.z - game.z
-            !game.isTaken(it) && dz > -2.4f && dz < 95f && (dz < 0.3f) == behindSki
+            !game.isTaken(it) && dz > -2.4f && dz < VISIBLE_FAR && (dz < 0.3f) == behindSki
         }
         for (o in visible.sortedByDescending { it.z }) drawObject(c, o, o.z - game.z, now)
     }
@@ -345,9 +368,9 @@ class StormRenderer(private val assets: StormAssets) {
     private fun drawObject(c: Canvas, o: Placed, dz: Float, now: Float) {
         val s = spec.scaleAt(max(dz, -2.4f))
         val w = objectWidth(o.kind, max(dz, -2.4f))
-        val x = spec.vanishX + o.x * spec.laneW * s
+        val x = spec.vanishX + (o.x - cam) * spec.laneW * s
         val y = spec.yAt(dz) + sin(now * 3f + o.z * 1.7f) * 5f * s
-        val alpha = (255 * ((95f - dz) / 18f).coerceIn(0f, 1f)).toInt()
+        val alpha = (255 * ((VISIBLE_FAR - dz) / 12f).coerceIn(0f, 1f)).toInt()
         when (o.kind) {
             Kind.COIN -> {
                 // Spinning coin hovering above the water.
@@ -420,16 +443,17 @@ class StormRenderer(private val assets: StormAssets) {
     /** Wooden temple gate with torches across the river at the finish line. */
     private fun drawFinishGate(c: Canvas, game: StormGame) {
         val dz = StormCourse.length - game.z
-        if (dz > 95f || dz < -2f) return
+        if (dz > VISIBLE_FAR + 20f || dz < -2f) return
         val s = spec.scaleAt(dz)
         val ss = sizeScale(dz)
         val y = spec.yAt(dz)
         val half = 1.75f * spec.laneW * s
         val postW = 46f * ss
         val postH = 520f * ss
-        val alpha = (255 * ((95f - dz) / 18f).coerceIn(0f, 1f)).toInt()
+        val alpha = (255 * ((VISIBLE_FAR + 20f - dz) / 12f).coerceIn(0f, 1f)).toInt()
+        val gx = spec.xAt(0f, dz, cam)
         for (side in floatArrayOf(-1f, 1f)) {
-            val px = spec.vanishX + side * half
+            val px = gx + side * half
             fill.shader = LinearGradient(px - postW, 0f, px + postW, 0f, intArrayOf(0xFF5A3216.toInt(), 0xFFA8693A.toInt(), 0xFF5A3216.toInt()),
                 null, Shader.TileMode.CLAMP)
             fill.alpha = alpha
@@ -449,12 +473,40 @@ class StormRenderer(private val assets: StormAssets) {
         val by = y - postH * 0.86f
         fill.shader = LinearGradient(0f, by, 0f, by + bh, intArrayOf(0xFFC07A3C.toInt(), 0xFF7A4520.toInt()), null, Shader.TileMode.CLAMP)
         fill.alpha = alpha
-        dst.set(spec.vanishX - bw / 2f, by, spec.vanishX + bw / 2f, by + bh)
+        dst.set(gx - bw / 2f, by, gx + bw / 2f, by + bh)
         c.drawRoundRect(dst, 12f * ss, 12f * ss, fill)
         fill.shader = null
         stroke.color = 0xFF3A1C08.toInt(); stroke.alpha = alpha; stroke.strokeWidth = 5f * ss
         c.drawRoundRect(dst, 12f * ss, 12f * ss, stroke)
-        text.gold(c, "FINISH", spec.vanishX, by + bh * 0.76f, 70f * ss, alpha = alpha)
+        text.gold(c, "FINISH", gx, by + bh * 0.76f, 70f * ss, alpha = alpha)
+    }
+
+    /**
+     * Jungle foliage along both banks, passing the jet ski: the strongest cue of forward
+     * speed. Fixed positions along the river (every [BANK_STEP] units), drawn with the
+     * painted leaves, mirrored on the right bank.
+     */
+    private fun drawBanks(c: Canvas, game: StormGame, behindSki: Boolean) {
+        val leaves = assets.sprite.getValue("leaves")
+        val first = kotlin.math.floor((game.z - 6f) / BANK_STEP).toInt()
+        val last = kotlin.math.floor((game.z + VISIBLE_FAR) / BANK_STEP).toInt()
+        for (i in last downTo first) {
+            val wz = i * BANK_STEP
+            val dz = wz - game.z
+            if (dz <= -6f || dz >= VISIBLE_FAR || (dz < 0.3f) != behindSki) continue
+            val side = if (i % 2 == 0) -1f else 1f
+            val s = spec.scaleAt(dz)
+            val w = 1.5f * spec.laneW * sizeScale(dz)
+            val h = w * leaves.height / leaves.width
+            val x = spec.vanishX + (side * (2.95f + (i * 37 % 5) * 0.08f) - cam) * spec.laneW * s
+            val y = spec.yAt(dz) + 10f * s
+            fade.alpha = (255 * ((VISIBLE_FAR - dz) / 12f).coerceIn(0f, 1f)).toInt()
+            c.save()
+            if (side > 0) c.scale(-1f, 1f, x, y)
+            dst.set(x - w * 0.7f, y - h, x + w * 0.3f, y)
+            c.drawBitmap(leaves, null, dst, fade)
+            c.restore()
+        }
     }
 
     private fun drawLeaves(c: Canvas) {
@@ -465,33 +517,34 @@ class StormRenderer(private val assets: StormAssets) {
     // ---- jet ski ---------------------------------------------------------------------
 
     private fun drawSki(c: Canvas, game: StormGame, now: Float) {
-        val box = skiBox
-        val dx = game.x * spec.laneW
+        val r = skiRect(game)
         val tilt = ((game.targetX - game.x) * 9f).coerceIn(-10f, 10f)
         val bob = sin(now * 6f) * 4f + if (game.section >= 2) sin(now * 11f) * 3f else 0f
         // Just hit: the jet ski flickers (never disappears) while it can't be hit again.
         val flicker = game.invulnerable && !game.shielded && ((now * 14f).toInt() % 2 == 0)
         skiPaint.alpha = if (flicker) 110 else 255
+        val contactY = spec.playerY
         c.save()
-        c.translate(dx, bob)
-        c.rotate(tilt, box.cx, box.b - 60f)
+        c.translate(0f, bob)
+        c.rotate(tilt, r.centerX(), contactY)
         // wake under the ski
-        fill.shader = RadialGradient(box.cx, box.b - 30f, 210f, intArrayOf(0x99FFFFFF.toInt(), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
-        dst.set(box.cx - 220f, box.b - 140f, box.cx + 220f, box.b + 90f)
+        fill.shader = RadialGradient(r.centerX(), contactY + 10f, r.width() * 0.62f,
+            intArrayOf(0x99FFFFFF.toInt(), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
+        dst.set(r.centerX() - r.width() * 0.65f, contactY - r.height() * 0.2f, r.centerX() + r.width() * 0.65f, contactY + r.height() * 0.22f)
         c.drawOval(dst, fill)
         fill.shader = null
-        c.drawBitmap(assets.sprite.getValue("jetski"), box.l, box.t, skiPaint)
+        c.drawBitmap(assets.sprite.getValue("jetski"), null, r, skiPaint)
         c.restore()
+        val cx = r.centerX()
+        val cy = r.top + r.height() * 0.55f
         if (game.shielded) {
             val left = game.shieldUntil - now
             val blink = left > 2f || ((now * 8f).toInt() % 2 == 0)
             if (blink) {
-                val cx = box.cx + dx
-                val cy = box.t + box.h * 0.55f
-                val r = box.w * 0.62f + 6f * sin(now * 6f)
-                fill.shader = RadialGradient(cx, cy, r, intArrayOf(0x0040C0FF, 0x3340C0FF, 0x9960D8FF.toInt()),
+                val rr = r.width() * 0.62f + 6f * sin(now * 6f)
+                fill.shader = RadialGradient(cx, cy, rr, intArrayOf(0x0040C0FF, 0x3340C0FF, 0x9960D8FF.toInt()),
                     floatArrayOf(0f, 0.75f, 1f), Shader.TileMode.CLAMP)
-                dst.set(cx - r, cy - r * 1.05f, cx + r, cy + r * 1.05f)
+                dst.set(cx - rr, cy - rr * 1.05f, cx + rr, cy + rr * 1.05f)
                 c.drawOval(dst, fill)
                 fill.shader = null
                 stroke.color = 0xFFBFF0FF.toInt(); stroke.alpha = 200; stroke.strokeWidth = 5f
@@ -502,8 +555,7 @@ class StormRenderer(private val assets: StormAssets) {
         if (kb in 0f..0.45f) {
             val k = kb / 0.45f
             stroke.color = 0xFF9BE6FF.toInt(); stroke.alpha = (255 * (1 - k)).toInt(); stroke.strokeWidth = 14f * (1 - k) + 2f
-            val r = box.w * (0.6f + 0.7f * k)
-            c.drawCircle(box.cx + dx, box.t + box.h * 0.55f, r, stroke)
+            c.drawCircle(cx, cy, r.width() * (0.6f + 0.7f * k), stroke)
         }
     }
 
@@ -782,5 +834,13 @@ class StormRenderer(private val assets: StormAssets) {
             (Color.green(a) + (Color.green(b) - Color.green(a)) * k).toInt(),
             (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * k).toInt(),
         )
+    }
+
+    companion object {
+        /** How far ahead (river units) objects are drawn: they emerge mid-river and approach. */
+        const val VISIBLE_FAR = 58f
+        /** The camera follows this share of the jet ski's sideways offset. */
+        const val CAM_FOLLOW = 0.32f
+        const val BANK_STEP = 7f
     }
 }

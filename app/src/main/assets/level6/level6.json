@@ -8,16 +8,18 @@
    180,
    420
   ],
-  "height": 780,
+  "height": 770,
   "waterTop": 690,
   "blend": 90
  },
  "perspective": {
   "horizon": 570,
-  "playerY": 1450,
+  "playerY": 1320,
   "vanishX": 470,
   "laneW": 300,
-  "depth": 10.0
+  "depth": 10.0,
+  "skiAnchorY": 1450,
+  "skiScale": 0.88
  },
  "sprites": {
   "barrel": {

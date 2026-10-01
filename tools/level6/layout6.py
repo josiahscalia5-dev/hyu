@@ -6,7 +6,12 @@ STAGE_W, STAGE_H = 941, 1672
 # ---- perspective of the river --------------------------------------------------
 # Screen position of a point X lanes to the side and z units ahead of the jet ski:
 #   s = D / (D + z);  y = HORIZON + (PLAYER_Y - HORIZON) * s;  x = VANISH_X + X * LANE_W * s
-HORIZON, PLAYER_Y, VANISH_X, LANE_W, DEPTH_D = 570, 1450, 470, 300, 10.0
+HORIZON, PLAYER_Y, VANISH_X, LANE_W, DEPTH_D = 570, 1320, 470, 300, 10.0
+# The jet ski sprite touches the water at SKI_ANCHOR_Y in the reference; in play it is drawn at
+# SKI_SCALE with that point on PLAYER_Y, just above the arrow buttons.
+SKI_ANCHOR_Y, SKI_SCALE = 1450, 0.88
+# The painted plate fades into the live river from here down (centre of the river) ...
+FADE_TOP_CENTRE, FADE_TOP_SIDES, FADE_LEN = 628, 700, 70
 # Water is drawn live below WATER_TOP (blending into the painted far water above it).
 WATER_TOP, WATER_BLEND = 690, 90
 

@@ -75,6 +75,22 @@ class StormFullScreenTest {
             assertTrue("${p.name}: HUD $tl..$br outside safe $safe",
                 tl.x >= safe.left - 0.5f && tl.y >= safe.top - 0.5f && br.x <= safe.right + 0.5f && br.y <= safe.bottom + 0.5f)
             assertTrue("${p.name}: game spans ${v.stageRect.width() / p.w} of the width", v.stageRect.width() >= 0.9f * p.w)
+            // The jet ski never touches the arrow buttons, in any lane, and stays on screen.
+            for (dir in intArrayOf(-1, 1, 1)) {
+                v.game.steer(dir)
+                repeat(40) { v.step(1f / 60f) }
+                val r = v.renderer.skiRect(v.game)
+                for (c in listOf(s.arrowLeft, s.arrowRight)) {
+                    val nx = c[0].coerceIn(r.left, r.right)
+                    val ny = c[1].coerceIn(r.top, r.bottom)
+                    val d = kotlin.math.hypot(nx - c[0], ny - c[1])
+                    assertTrue("${p.name}: ski at lane ${v.game.x} overlaps an arrow (gap ${d - c[2]})", d > c[2])
+                }
+                val tl2 = v.stageToView(r.left, r.top)
+                val br2 = v.stageToView(r.right, r.bottom)
+                assertTrue("${p.name}: ski off screen at lane ${v.game.x}", tl2.x >= 0f && br2.x <= p.w && br2.y <= p.h)
+                if (dir == 1 && v.game.x > 0.5f) render(v, "${p.name}_right_lane")
+            }
         }
         val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
         val sel = LevelSelectView(activity, RuntimeEnvironment.getApplication().assets) {}

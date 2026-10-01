@@ -76,8 +76,8 @@ def fill_panels(img, m):
 
 
 def build_sky(ref, work):
-    """The scene above WATER_TOP + WATER_BLEND, extended left/right/up by outpainting."""
-    h_sky = L.WATER_TOP + L.WATER_BLEND
+    """The scene above the river (fading into it), extended left/right/up by outpainting."""
+    h_sky = L.FADE_TOP_SIDES + L.FADE_LEN
     sky = fill_panels(ref, hud_text_mask(ref))[:h_sky].copy()
     # Clear objects floating in the far water band (they become live objects).
     m = np.zeros(sky.shape[:2], np.uint8)
@@ -104,11 +104,13 @@ def build_sky(ref, work):
     inner = cv2.erode(mm, np.ones((49, 49), np.uint8))
     ext = lama.inpaint(seed, cv2.subtract(mm, inner))
     ext[EXT_Y:, EXT_X:EXT_X + ww] = sky
-    # Fade the bottom band so the live, moving river shows through below the painted far water.
-    a = np.ones(ext.shape[:2], np.float32)
-    y0 = EXT_Y + L.WATER_TOP
-    ramp = np.linspace(1, 0, ext.shape[0] - y0) ** 1.4
-    a[y0:] = ramp[:, None]
+    # Fade the painted far water so the live, moving river takes over right below the waterfalls.
+    # The fade starts higher in the middle of the river than at the rocky banks on each side.
+    hh_, ww_ = ext.shape[:2]
+    xs = (np.arange(ww_) - EXT_X - L.VANISH_X) / float(L.VANISH_X)
+    top = L.FADE_TOP_CENTRE + (L.FADE_TOP_SIDES - L.FADE_TOP_CENTRE) * np.clip(np.abs(xs), 0, 1) ** 2
+    ys = np.arange(hh_)[:, None] - EXT_Y
+    a = np.clip(1 - (ys - top[None, :]) / L.FADE_LEN, 0, 1).astype(np.float32) ** 1.3
     save_rgba(os.path.join(OUT, "sky.png"), ext, a)
     return ext
 
@@ -223,10 +225,11 @@ def main(work="/tmp/level6_work"):
     build_water(ref, work)
     spec = {
         "stage": [L.STAGE_W, L.STAGE_H],
-        "sky": {"margin": [EXT_X, EXT_Y], "height": L.WATER_TOP + L.WATER_BLEND,
+        "sky": {"margin": [EXT_X, EXT_Y], "height": L.FADE_TOP_SIDES + L.FADE_LEN,
                 "waterTop": L.WATER_TOP, "blend": L.WATER_BLEND},
         "perspective": {"horizon": L.HORIZON, "playerY": L.PLAYER_Y, "vanishX": L.VANISH_X,
-                        "laneW": L.LANE_W, "depth": L.DEPTH_D},
+                        "laneW": L.LANE_W, "depth": L.DEPTH_D,
+                        "skiAnchorY": L.SKI_ANCHOR_Y, "skiScale": L.SKI_SCALE},
         "sprites": sprites,
         "hud": {"pause": list(L.PAUSE), "stars": [list(b) for b in L.STARS], "starBar": list(L.STAR_BAR),
                 "score": list(L.SCORE_DIGITS), "timer": list(L.TIMER_DIGITS),

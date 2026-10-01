@@ -25,7 +25,7 @@ import kotlin.math.min
 class StormView(context: Context, private val assets: StormAssets) : View(context), Choreographer.FrameCallback {
     var game = StormGame()
         private set
-    private val renderer = StormRenderer(assets)
+    val renderer = StormRenderer(assets)
     private val spec = assets.spec
     private val fit = StageFit(spec.stageW, spec.stageH, spec.hudExtent)
     private val bgPaint = Paint(Paint.FILTER_BITMAP_FLAG)
@@ -148,14 +148,14 @@ class StormView(context: Context, private val assets: StormAssets) : View(contex
                     }
                     else -> {
                         dragging = true
-                        game.steerTo((x - spec.vanishX) / spec.laneW)
+                        game.steerTo(spec.lanesAtSki(x, renderer.camLanes(game)))
                     }
                 }
             }
             MotionEvent.ACTION_MOVE -> if (dragging) {
                 for (k in 0 until e.pointerCount) {
                     if (e.getPointerId(k) == arrowPointer) continue
-                    game.steerTo((fit.toStageX(e.getX(k)) - spec.vanishX) / spec.laneW)
+                    game.steerTo(spec.lanesAtSki(fit.toStageX(e.getX(k)), renderer.camLanes(game)))
                     break
                 }
             }
