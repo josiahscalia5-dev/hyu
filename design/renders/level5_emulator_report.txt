@@ -1,0 +1,17 @@
+1. start: cyan ball loaded, 31 blocks, timer 35s, score 1760
+ 1. cyan    ball -> cleared 6, shifted 5, left 25 | combo x10  score 2,360  coins +36  stars 2  timer 35s  next: yellow
+ 2. yellow  ball -> cleared 3, shifted 1, left 22 | combo x11  score 2,690  coins +39  stars 2  timer 34s  next: yellow
+ 3. yellow  ball -> cleared 3, shifted 4, left 19 | combo x12  score 3,050  coins +42  stars 2  timer 33s  next: cyan
+ 4. cyan    ball -> cleared 2, shifted 2, left 17 | combo x13  score 3,310  coins +44  stars 2  timer 31s  next: magenta
+ 5. magenta ball -> cleared 2, shifted 4, left 15 | combo x14  score 3,590  coins +46  stars 2  timer 29s  next: yellow
+ 6. yellow  ball -> cleared 4, shifted 4, left 11 | combo x15  score 4,190  coins +50  stars 3  timer 28s  next: magenta
+ 7. magenta ball -> cleared 2, shifted 2, left  9 | combo x16  score 4,510  coins +52  stars 3  timer 26s  next: magenta
+ 8. magenta ball -> cleared 2, shifted 0, left  7 | combo x17  score 4,850  coins +54  stars 3  timer 25s  next: red
+ 9. red     ball -> cleared 1, shifted 1, left  6 | combo x18  score 5,030  coins +55  stars 3  timer 22s  next: cyan
+10. cyan    ball -> cleared 1, shifted 2, left  5 | combo x19  score 5,220  coins +56  stars 3  timer 20s  next: magenta
+11. magenta ball -> cleared 2, shifted 0, left  3 | combo x20  score 5,620  coins +58  stars 3  timer 18s  next: red
+12. red     ball -> cleared 1, shifted 0, left  2 | combo x21  score 5,830  coins +59  stars 3  timer 16s  next: yellow
+13. yellow  ball -> cleared 1, shifted 0, left  1 | combo x22  score 6,050  coins +60  stars 3  timer 13s  next: violet
+14. violet  ball -> cleared 1, shifted 0, left  0 | combo x23  score 6,520  coins +61  stars 3  timer 12s
+10. Level Complete after 14 shots (9 colour shifts, 0 ball taps): score 6520, 3 stars, +61 coins, 12s left
+    tap on the Level Complete card restarts the level (31 blocks, cyan ball)
