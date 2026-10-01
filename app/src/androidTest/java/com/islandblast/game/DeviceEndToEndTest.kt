@@ -24,9 +24,8 @@ import java.io.File
  * The whole game on a real device/emulator: launched like a player launches it, real
  * frame loop and real time, touches injected through the input system, every screen
  * checked on real screenshots of the display:
- * Home → PLAY → World 1 → Level 4 → Level Complete → World 1 → Level 5 →
- * Level Complete → World 1 → Level 6 → Level Complete → World 1 Complete →
- * World 2 Unlocked → World 1 → Back → Home.
+ * Home → PLAY → World 1 → Level 5 → Level Complete → World 1 → Level 6 →
+ * Level Complete → World 1 Complete → World 2 Unlocked → World 1 → Back → Home.
  * Screenshots and the report go to the app's external files dir under e2e/
  * (adb pull /sdcard/Android/data/com.islandblast.game/files/e2e).
  *
@@ -120,9 +119,7 @@ class DeviceEndToEndTest {
 
             override fun pressBack() = onMain { app.back() }
         }
-        // -e skipLevel4 true: Level 4 takes about an hour on a software-emulated device.
-        val skip4 = InstrumentationRegistry.getArguments().getString("skipLevel4") == "true"
-        val report = FlowChecklist(driver, playLevel4 = !skip4).run()
+        val report = FlowChecklist(driver).run()
         File(outDir, "report.txt").writeText(report)
     }
 }

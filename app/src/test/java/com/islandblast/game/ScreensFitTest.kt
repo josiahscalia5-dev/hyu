@@ -137,14 +137,14 @@ class ScreensFitTest {
     }
 
     @Test
-    fun worldOneHasLevelsOneToSixEndingWithStormDodge() {
+    fun worldOneIsLevelsOneToSixWithOnlyFiveAndSixBuilt() {
         val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
         val world = Catalog.load(activity.assets).worlds.first()
         assertEquals((1..6).toList(), world.levels.map { it.number })
-        assertEquals(listOf("Relic Ricochet", "Totem Sequence", "Coral Current", "Mystic Harvest", "Temple Chase", "Storm Dodge"),
-            world.levels.map { it.name })
-        assertEquals(listOf(null, null, null, "treasure-slice", "color-shift", "storm-dodge"), world.levels.map { it.kind })
-        assertEquals(listOf(4, 5, 6), world.levels.filter { it.playable }.map { it.number })
+        // Levels 1-4 are not built: no name, no gameplay, shown as Coming Soon.
+        assertEquals(listOf("", "", "", "", "Temple Chase", "Storm Dodge"), world.levels.map { it.name })
+        assertEquals(listOf(null, null, null, null, "color-shift", "storm-dodge"), world.levels.map { it.kind })
+        assertEquals(listOf(5, 6), world.levels.filter { it.playable }.map { it.number })
         assertEquals(world.level(6), world.lastLevel)
         assertEquals(2, world.gate!!.to)
         val progress = Progress(activity).apply { clear() }

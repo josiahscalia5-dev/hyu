@@ -12,7 +12,7 @@ import android.view.View
 import com.islandblast.game.ui.UiKit
 import kotlin.math.sin
 
-/** Shown for the moment a screen's art is decoded off the UI thread: "Level 4 · Mystic Harvest". */
+/** Shown for the moment a screen's art is decoded off the UI thread: "Level 5 · Temple Chase". */
 class LoadingScreen(context: Context, ui: UiKit, title: String, subtitle: String) : Screen {
     private val card = LoadingView(context, ui, title, subtitle)
     override val view: View get() = card

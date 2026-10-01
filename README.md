@@ -8,14 +8,15 @@ Android (Kotlin, API 26+) game, all in one app:
 |---|---|---|
 | Home | Title screen: logo, character, PLAY, top bar, bottom nav | `design/home_reference_upload.png` |
 | World 1 map | "Tropical Islands": Levels 1–6 on a chain of islands, then the gate to World 2; tap a level to play it | none (designed for this app) |
-| Levels 1–3 "Relic Ricochet", "Totem Sequence", "Coral Current" | Coming soon (not built yet) | none yet |
-| Level 4 "Mystic Harvest" | Treasure slicing: swipe to cut gems, coins, crates, barrels and chests | `design/level4_reference.png` |
-| Level 5 "Temple Chase" | Colour-shift block shooting (unchanged gameplay) | `design/level5_fullscreen_reference.png` |
+| Levels 1–4 | Coming Soon: not built yet (locked, no name, no stars) | none yet |
+| Level 5 "Temple Chase" | The colour-shift block level (unchanged gameplay) | `design/level5_fullscreen_reference.png` |
 | Level 6 "Storm Dodge" | Jet ski down a stormy river, dodging hazards (unchanged gameplay) | `design/level6_storm_dodge_reference.png` |
 | World 1 Complete | After Level 6's Level Complete: every World 1 level and its stars, then "World 2 Unlocked!" | none (designed for this app) |
+| Mystic Harvest (not on the map) | Treasure slicing, built but not Level 4 (Jungle Zip); kept in the code | `design/level4_reference.png` |
 
-The app opens on Home. PLAY (or the Levels tile) opens the World 1 map. Levels 4,
-5 and 6 are playable; Levels 1–3 are shown as "coming soon" until they are built.
+The app opens on Home. PLAY (or the Levels tile) opens the World 1 map. Only Levels
+5 and 6 are playable; Levels 1–4 are locked and marked "Coming Soon" until they are
+built.
 Finishing a level shows Level Complete with its stars. **Continue** returns to the
 map, where the stars are saved and the player marker moves on to the next level.
 Level 6 is World 1's last level: the first time it is completed, Continue leads to
@@ -40,7 +41,8 @@ them and `app/Navigator` shows one at a time. Levels are data:
   folder). A level with no `kind` shows on the map as coming soon. A world's
   `gate` is the way on to the next world, at the end of its map's path.
 - **`levels/LevelKinds`** maps each kind to code that builds the level:
-  `treasure-slice` (Level 4), `color-shift` (Level 5) and `storm-dodge` (Level 6).
+  `color-shift` (Level 5), `storm-dodge` (Level 6) and `treasure-slice` (Mystic
+  Harvest, not on the map).
 - **`levels/LevelPlay`** is what every level gives the host: its view, state,
   score, stars and goal, plus pause and restart.
 - **`levels/LevelScreen`** hosts any level. It draws the pause menu (Resume,
@@ -89,23 +91,28 @@ and the top-bar buttons say "Coming soon!".
 
 A top-down chain of islands painted by `tools/map/build.py` in the game's palette,
 with turquoise shallows, foam, sandy cliffs, grass, palms and plank bridges where
-the path crosses water. Level 4's island has its treasure chest and gems; Level
-5's has a stack of its colour blocks. Each level button shows:
+the path crosses water. Level 5's island has a stack of its colour blocks (only
+built levels get props: Level 4's island is plain until Jungle Zip exists). Each
+level button shows:
 
 - its number;
 - the stars earned (empty stars show what is left);
 - its name, for built levels.
 
-A lock and "Soon" mark levels not built yet (tapping one names it: "Relic Ricochet
-is coming soon!"). The next level to play glows and carries the player's marker;
+A lock and "Coming Soon" mark Levels 1–4, which are not built yet: no name, no
+stars, and tapping one only says "Level N is coming soon!". The next level to play glows and carries the player's marker;
 after Continue the marker walks over to the next level. Level 6 sits on the island
 after Level 5, and the path runs on over the bridge to the **World 2 gate**: grey
 with a padlock until World 1 is complete, then green and glowing (the path to it
 turns gold). The header shows the world, a back button and the stars earned in the
-world (out of 9: three playable levels). The map covers the screen edge to edge but is never scaled so far that a
+world (out of 6: two playable levels). The map covers the screen edge to edge but is never scaled so far that a
 level button leaves the safe area.
 
-## Level 4 "Mystic Harvest": treasure slicing
+## Mystic Harvest: treasure slicing (built, not on the map)
+
+Built as Level 4 from `design/level4_reference.png`, but it is not Level 4 Jungle
+Zip, so it is off the World 1 map. Its code (`treasure-slice`), art (`assets/level4/`)
+and tests are kept; putting it on a map is one entry in `worlds.json`.
 
 **Swipe across treasure to slice it.** The blade's trail follows your finger: a
 crescent of white light edged in blue, like the painted slash. The sword hilt turns
@@ -235,33 +242,34 @@ Replaying Level 6 later goes straight back to the map.
 
 ## Decisions to review
 
-- **Level 4 is "Mystic Harvest", not "Jungle Zip".** The World 1 list names Level 4
-  "Jungle Zip", but no Jungle Zip implementation, design or asset exists on any
-  branch of this repository; the approved Level 4 design
-  (`design/level4_reference.png`) is itself titled "Level 4 Mystic Harvest". It is
-  kept, unchanged, as the base branch had it. If Jungle Zip should replace it,
-  Mystic Harvest's slot is one entry in `worlds.json`.
-- **Level 5 is named "Temple Chase"** (World 1 list). Its old name, "Temple of
-  Colours", was a placeholder; the gameplay and art are unchanged.
-- **Levels 1–3** ("Relic Ricochet", "Totem Sequence", "Coral Current") are on the
-  map as "coming soon": nothing for them exists in this repository yet.
+- **Only Levels 5 and 6 are built.** Levels 1–4 (Relic Ricochet, Totem Sequence,
+  Coral Current, Jungle Zip in the master spec) are locked "Coming Soon" buttons;
+  their planned names are kept in `worlds.json` (`planned`) but not shown.
+- **Mystic Harvest is off the map**: it is not Jungle Zip. Its chest and gems were
+  taken off Level 4's island in the map art (`tools/map/build.py` paints a level's
+  props only when it is built); nothing else in the art changed.
+- **Level 5 "Temple Chase" is the colour-shift block level.** The master-spec mockup
+  shows Temple Chase as a runner ("Run, jump, and escape the temple guardian!"); no
+  such runner exists in this repository. The APK's Level 5 is the colour-shift
+  level from the approved Level 5 design, named Temple Chase on the owner's
+  instruction (its old name, "Temple of Colours", was a placeholder).
 - **World 1 is Levels 1–6.** The map had ten buttons (7–10 coming soon); 7–10 are
   gone and the World 2 gate stands on Level 7's old island. The map art is
   unchanged, so the islands at the top are scenery for now.
 
-- **All built levels are open from the start** (4, 5 and 6), as on the base
-  branch, so any can be played (and previewed) first. The marker points to the
-  first one not yet completed, so it leads 4 → 5 → 6. World 1 Complete comes when
+- **Both built levels are open from the start** (5 and 6), as on the base
+  branch, so either can be played (and previewed) first. The marker points to the
+  first one not yet completed, so it leads 5 → 6. World 1 Complete comes when
   Level 6, the last level, is completed.
 - **Level 6's own end card** ("STORM SURVIVED!" with the coins/hits tally, "Tap to
   ride again") and its tap-to-resume pause screen are replaced in the app by the
   shared Level Complete / Time's Up card and pause menu, as Level 5's were. Its
   HUD, river and art are unchanged.
-- **Level 4 starts fresh** (score 0, 1:00, no stars), so it has a real start and
-  goal. The painted "1,240", "0:28" and "Combo x8" were a mid-game snapshot.
+- **Mystic Harvest starts fresh** (score 0, 1:00, no stars), so it has a real start
+  and goal. The painted "1,240", "0:28" and "Combo x8" were a mid-game snapshot.
   **Level 5 still opens as painted** (score 1,760, 0:36, two stars), as before;
   `Rules` holds those values.
-- **Level 4's level length:** each barrel adds 2 s, so a player who slices every
+- **Mystic Harvest's level length:** each barrel adds 2 s, so a player who slices every
   barrel plays past 60 s. Set `"barrelSeconds": 0` to keep it at exactly a
   minute.
 - **The World 1 map** had no reference, so it was designed for this app.
@@ -276,15 +284,16 @@ Replaying Level 6 later goes straight back to the map.
 ```
 
 **`GameFlowTest` is the whole game end to end**, with real touches through the real
-`MainActivity`: Home → PLAY → World 1 → Level 4 played to Level Complete →
-Continue → World 1 → Level 5 played to Level Complete → Continue → World 1 →
+`MainActivity`: Home → PLAY → World 1 (Levels 1–4 each tapped: "coming soon") →
+Level 5 played to Level Complete → Continue → World 1 →
 Level 6 played to Level Complete → Continue → World 1 Complete → World 2 Unlocked →
 Continue → World 1 → Back → Home. On the way it checks:
 
 - **Home:** everything is on screen.
-- **Map:** World 1 is Levels 1–6; every level button and the World 2 gate are on
-  screen. A coming-soon level, and the locked gate, keep you on the map.
-- **Level 4** (`SliceChecklist`), with real swipes:
+- **Map:** World 1 is Levels 1–6, only 5 (Temple Chase) and 6 (Storm Dodge)
+  playable, 1–4 nameless; every level button and the World 2 gate are on screen;
+  the marker starts on Level 5. Levels 1–4, and the locked gate, keep you on the map.
+- **Mystic Harvest** (`SliceChecklist`, run when the level is on a map), with real swipes:
   - every crossed treasure is cut and its two halves fly;
   - chests lose one hit per swipe and then spill loot;
   - barrels add time;
@@ -311,9 +320,8 @@ adb shell am instrument -w -e class com.islandblast.game.DeviceEndToEndTest \
 adb pull /sdcard/Android/data/com.islandblast.game/files/e2e   # screenshots + report
 ```
 
-Add `-e skipLevel4 true` to start from Level 5: on a software-emulated device (no
-KVM) Level 4 alone takes about an hour. The harness holds the game clock while it
-plans a swipe or shot and reads screenshots; the clock runs between moves.
+The harness holds the game clock while it plans a shot and reads screenshots; the
+clock runs between moves.
 
 Before the Level 6 merge (version 0.6.0) this was verified on an Android 11
 emulator (1080×2400) with real injected touches. One run went through Home → World 1
@@ -330,10 +338,10 @@ Other tests:
 | Test | What it covers |
 |---|---|
 | `SliceRulesTest` | Cutting, slow drags, misses, chests and loot, barrels, combo chain and reset, drops, multi-cut bonus, the intro, win/lose, pause |
-| `SlicePlaythroughTest` | Level 4's balance, with the three players above |
-| `SliceScreenshotTest` | Level 4 frames to `app/build/level4-shots/` |
+| `SlicePlaythroughTest` | Mystic Harvest's balance, with the three players above |
+| `SliceScreenshotTest` | Mystic Harvest frames to `app/build/level4-shots/` |
 | `ScreensFitTest` | Home, the map (with the World 2 gate) and World 1 Complete on five phone shapes (20:9 punch-hole, 19.5:9 notch, 16:9, 21:9 cutout, 720×1600): nothing cut off, all inside the safe area; World 1's levels, names and kinds |
-| `FullScreenTest` | The same five shapes for Levels 4 and 5 |
+| `FullScreenTest` | The same five shapes for Level 5 and Mystic Harvest |
 | `StormRulesTest`, `StormScreenshotTest`, `StormFullScreenTest`, `StormPreviewTest` | Level 6's rules (with a careful bot that finishes with zero hits), a played run's frames to `app/build/level6-shots/`, five phone shapes, and the preview render `design/renders/level6_preview.png` |
 | `design/renders/` | `flow.png` (the journey), `level4_slicing.png`, `home_phones.png`, `map_phones.png`, `device_emulator_flow.png` |
 | `ColorShiftRulesTest`, `PlaythroughTest`, `ScreenshotTest` | Level 5's rules, a full bot playthrough, and frame-0 fidelity to its design |
@@ -345,7 +353,7 @@ pip install -r tools/assets/requirements.txt
 export LAMA_MODEL=/path/to/big-lama.pt   # github.com/enesmsahin/simple-lama-inpainting releases
 python3 tools/home/segment.py && python3 tools/home/build.py /tmp/home_work   # Home (segment.py needs SAM_MODEL)
 python3 tools/map/build.py                                                    # World 1 map
-python3 tools/level4/build.py /tmp/level4_work                                # Level 4 (runs lagoon.py too)
+python3 tools/level4/build.py /tmp/level4_work                                # Mystic Harvest (runs lagoon.py too)
 python3 tools/assets/build_plate.py /tmp/level5_work && python3 tools/assets/build_sprites.py /tmp/level5_work
 python3 tools/level6/build6.py                                                # Level 6
 ```

@@ -1,10 +1,14 @@
 """Paints the World 1 "Tropical Islands" map backdrop (assets/maps/w1/).
 
-A top-down sea with raised sandy islands under the level path (node positions come
-from assets/worlds.json): turquoise shallows and foam around each island, a cliff
-edge for depth, grass, palm trees, and the levels' own painted props as landmarks
-(Level 4's treasure chest and gems, Level 5's colour blocks). Painted past every edge
-so any phone shape is covered.
+A top-down sea with raised sandy islands under the level path: turquoise shallows and
+foam around each island, a cliff edge for depth, grass, palm trees, and built levels'
+own painted props as landmarks (Level 5's colour blocks; Level 4's treasure chest and
+gems only while Level 4 is the treasure-slicing level). Painted past every edge so any
+phone shape is covered.
+
+The island chain is laid out for ten stops (LAYOUT). World 1 uses the first six for
+Levels 1-6 and the seventh for the gate to World 2 (assets/worlds.json); the rest are
+scenery.
 
   pip install -r tools/assets/requirements.txt
   python3 tools/map/build.py
@@ -44,10 +48,28 @@ def noise(h, w, scale, octaves=4, seed=0):
     return (out - out.min()) / (out.max() - out.min() + 1e-6)
 
 
-def nodes():
+# The stops the island chain is drawn around, in map-art pixels.
+LAYOUT = {1: (300, 2085), 2: (640, 2000), 3: (850, 1800), 4: (610, 1590), 5: (290, 1400),
+          6: (460, 1180), 7: (790, 1040), 8: (620, 850), 9: (300, 720), 10: (560, 540)}
+
+
+def world1():
     with open(os.path.join(ASSETS, "worlds.json")) as f:
-        w = json.load(f)["worlds"][0]
-    return [(l["number"], l["node"][0] + MX, l["node"][1] + MY) for l in w["levels"]]
+        return json.load(f)["worlds"][0]
+
+
+def nodes():
+    w = world1()
+    # World 1's level buttons and its gate must sit on the stops the islands are drawn for.
+    stops = [(l["number"], l["node"]) for l in w["levels"]] + [(len(w["levels"]) + 1, w["gate"]["node"])]
+    for k, node in stops:
+        assert tuple(node) == LAYOUT[k], f"stop {k} at {node}, but the islands are drawn for {LAYOUT[k]}"
+    return [(k, x + MX, y + MY) for k, (x, y) in LAYOUT.items()]
+
+
+def kind(number):
+    """The gameplay kind of World 1's level [number] (None while it is not built)."""
+    return next((l.get("kind") for l in world1()["levels"] if l["number"] == number), None)
 
 
 # Islands as blobs (centre x, centre y, radius x, radius y) in padded pixels: one island
@@ -298,12 +320,14 @@ def props(img, land):
     n = {k: (x, y) for k, x, y in nodes()}
     l4 = os.path.join(ASSETS, "level4")
     l5 = os.path.join(ASSETS, "level5")
-    # Level 4: the treasure chest, gems and a coin beside its button.
-    chest = load_rgba(os.path.join(l4, "t_chest_jewel.png"))
-    paste(img, chest, n[4][0] + 195, n[4][1] - 45, 0.46)
-    paste(img, load_rgba(os.path.join(l4, "t_gem_red.png")), n[4][0] + 205, n[4][1] + 70, 0.3, rot=-15)
-    paste(img, load_rgba(os.path.join(l4, "t_gem_blue.png")), n[4][0] + 290, n[4][1] + 25, 0.28, rot=12)
-    paste(img, load_rgba(os.path.join(l4, "t_coin_center.png")), n[4][0] - 120, n[4][1] - 95, 0.3)
+    # Level 4: the treasure chest, gems and a coin beside its button (only while Level 4
+    # is the treasure-slicing level; its spot stays clear of palms either way).
+    if kind(4) == "treasure-slice":
+        chest = load_rgba(os.path.join(l4, "t_chest_jewel.png"))
+        paste(img, chest, n[4][0] + 195, n[4][1] - 45, 0.46)
+        paste(img, load_rgba(os.path.join(l4, "t_gem_red.png")), n[4][0] + 205, n[4][1] + 70, 0.3, rot=-15)
+        paste(img, load_rgba(os.path.join(l4, "t_gem_blue.png")), n[4][0] + 290, n[4][1] + 25, 0.28, rot=12)
+        paste(img, load_rgba(os.path.join(l4, "t_coin_center.png")), n[4][0] - 120, n[4][1] - 95, 0.3)
     # Level 5: a little stack of its colour blocks.
     atlas = {c: np.array(Image.open(os.path.join(l5, f"blocks_{c}.png")).convert("RGBA")).astype(np.float32)
              for c in ("cyan", "magenta", "yellow", "red", "violet")}

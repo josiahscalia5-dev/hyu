@@ -2,9 +2,13 @@
   "_doc": [
     "Every world and level in Island Blast. A level with a 'kind' is playable; one without is",
     "shown on the map as coming soon. To add a level of an existing kind, give it a 'kind' and",
-    "a 'dir' (asset folder with its art and settings). Kinds: 'treasure-slice' (Level 4),",
-    "'color-shift' (Level 5), 'storm-dodge' (Level 6). 'node' is where its button sits on the",
+    "a 'dir' (asset folder with its art and settings). Kinds: 'color-shift' (Level 5),",
+    "'storm-dodge' (Level 6), 'treasure-slice' (Mystic Harvest). 'node' is where its button sits on the",
     "world map (map-art px). 'config' (optional) overrides keys of the level's own settings file.",
+    "'planned' is a level's name in the master spec while it is not built yet: it is not shown",
+    "anywhere (the map marks the level 'Coming Soon'); give the level a 'name', 'kind' and 'dir'",
+    "when it is built. (Mystic Harvest, the treasure-slicing level, is built but is not Jungle",
+    "Zip, so it is not on the map: its kind 'treasure-slice' and folder 'level4' are kept.)",
     "'gate' is the way on to the next world, at the end of the map's path: finishing the world's",
     "last level completes the world and unlocks it."
   ],
@@ -14,10 +18,10 @@
       "number": 1,
       "name": "Tropical Islands",
       "levels": [
-        {"number": 1, "name": "Relic Ricochet", "node": [300, 2085]},
-        {"number": 2, "name": "Totem Sequence", "node": [640, 2000]},
-        {"number": 3, "name": "Coral Current", "node": [850, 1800]},
-        {"number": 4, "name": "Mystic Harvest", "kind": "treasure-slice", "dir": "level4", "node": [610, 1590]},
+        {"number": 1, "planned": "Relic Ricochet", "node": [300, 2085]},
+        {"number": 2, "planned": "Totem Sequence", "node": [640, 2000]},
+        {"number": 3, "planned": "Coral Current", "node": [850, 1800]},
+        {"number": 4, "planned": "Jungle Zip", "node": [610, 1590]},
         {"number": 5, "name": "Temple Chase", "kind": "color-shift", "dir": "level5", "node": [290, 1400]},
         {"number": 6, "name": "Storm Dodge", "kind": "storm-dodge", "dir": "level6", "node": [460, 1180]}
       ],

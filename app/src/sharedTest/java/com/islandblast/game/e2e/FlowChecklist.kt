@@ -46,13 +46,12 @@ interface FlowDriver {
 
 /**
  * The whole game as a player meets it, with real touches:
- * Launch → Home → PLAY → World 1 map → Level 4 → complete it → back on the map →
- * Level 5 → complete it → back on the map → Level 6 → complete it → World 1 Complete →
- * World 2 Unlocked → back on the map (World 2's gate open) → Back → Home.
- * Every screen is captured and checked on the way. With [playLevel4] false the run
- * skips Level 4 (for re-checking the rest quickly on a slow emulator).
+ * Launch → Home → PLAY → World 1 map (Levels 1–4 coming soon) → Level 5 → complete it →
+ * back on the map → Level 6 → complete it → World 1 Complete → World 2 Unlocked → back
+ * on the map (World 2's gate open) → Back → Home.
+ * Every screen is captured and checked on the way.
  */
-class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean = true) {
+class FlowChecklist(private val d: FlowDriver) {
     private val report = StringBuilder()
     private var shot = 0
 
@@ -72,7 +71,6 @@ class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean =
 
     fun run(): String {
         val world = d.onMain { d.activity.flow.catalog.worlds.first() }
-        val l4 = world.level(4)!!
         val l5 = world.level(5)!!
         val l6 = world.level(6)!!
 
@@ -102,8 +100,12 @@ class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean =
         d.onMain {
             assertEquals("Tropical Islands", map.world.name)
             assertEquals("World 1 has Levels 1-6", (1..6).toList(), world.levels.map { it.number })
-            assertTrue(l4.playable && l5.playable && l6.playable)
+            assertEquals("only Levels 5 and 6 are built", listOf(5, 6), world.levels.filter { it.playable }.map { it.number })
+            for (lv in world.levels.take(4)) assertTrue("level ${lv.number} has no name until it is built", lv.name.isEmpty())
+            assertEquals("Temple Chase", l5.name)
+            assertEquals("Storm Dodge", l6.name)
             assertEquals("Level 6 is the world's last level", l6, world.lastLevel)
+            assertEquals("the marker starts on Level 5, the first built level", l5, map.current)
             val buttons = map.world.levels.map { "level ${it.number}" to map.nodeCenter(it) } + ("World 2 gate" to map.gateCenter()!!)
             for ((name, c) in buttons) {
                 assertTrue("map: $name button off screen at $c",
@@ -113,34 +115,33 @@ class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean =
             assertFalse("World 2 starts locked", d.activity.flow.progress.worldUnlocked(2))
         }
         say("2. PLAY → World 1 \"${world.name}\": ${world.levels.size} levels " +
-            "(${world.levels.joinToString { "${it.number} ${it.name}" }}), " +
-            "playable ${world.levels.filter { it.playable }.map { it.number }}, the rest coming soon; World 2's gate is locked")
+            "(${world.levels.joinToString { if (it.playable) "${it.number} ${it.name}" else "${it.number} coming soon" }}), " +
+            "playable ${world.levels.filter { it.playable }.map { it.number }}; the marker is on Level 5; World 2's gate is locked")
 
-        // A level that is not built yet only says so.
-        val soon = world.levels.first { !it.playable }
-        tap(d.onMain { map.nodeCenter(soon) })
-        idle(0.3f)
-        assertTrue("a coming-soon level keeps the player on the map", screen is MapScreen)
-        capture("coming_soon_toast")
-        say("   Level ${soon.number} (not built yet) shows \"coming soon\" and stays on the map")
+        // Levels that are not built yet only say so (Level 4 no longer opens anything).
+        for (soon in world.levels.filter { !it.playable }) {
+            tap(d.onMain { map.nodeCenter(soon) })
+            idle(0.3f)
+            assertTrue("coming-soon level ${soon.number} keeps the player on the map", screen is MapScreen)
+            if (soon.number == 1 || soon.number == 4) capture("level${soon.number}_coming_soon")
+            idle(1.8f)
+        }
+        say("   Levels 1–4 (not built yet) each show \"Level N is coming soon!\" and stay on the map")
         tap(d.onMain { map.gateCenter()!! })
         idle(0.3f)
         assertTrue("the locked World 2 gate keeps the player on the map", screen is MapScreen)
         capture("world2_locked_toast")
         say("   World 2's gate (locked) says to finish World 1 first")
 
-        // 3. Level 4 from the map, played to Level Complete.
-        val mapNow = if (playLevel4) level4(map, l4, l5) else map
-
-        // 4. Level 5 from the map, played to Level Complete.
-        tap(d.onMain { mapNow.nodeCenter(l5) })
+        // 3. Level 5 from the map, played to Level Complete.
+        tap(d.onMain { map.nodeCenter(l5) })
         d.waitFor("Level 5", 30f) { (screen as? LevelScreen)?.level == l5 }
         val s5 = screen as LevelScreen
         assertTrue("Level 5 is the colour-shift block game", s5.play is GameView)
         d.waitFor("Level 5 laid out", 10f) { s5.play.view.width > 0 }
         idle(0.3f)
         capture("level5_start")
-        say("4. Level 5 \"${l5.name}\" opens from the map (colour-shift blocks)")
+        say("3. Level 5 \"${l5.name}\" opens from the map (the colour-shift block level)")
         val level5 = Level5Checklist(object : Driver {
             override val view: GameView get() = s5.play as GameView
             override val background: Bitmap get() = d.level5Background
@@ -167,15 +168,15 @@ class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean =
         say("   Continue → back on World 1: Level 5 shows $stars5 stars, the marker moves on to Level 6; World 1 total ${d.onMain {
             d.activity.flow.progress.totalStars(world) }} stars")
 
-        // 5. Level 6 from the map, played to Level Complete, then World 1 Complete.
+        // 4. Level 6 from the map, played to Level Complete, then World 1 Complete.
         val map4 = level6(map3, l6)
 
-        // 6. Back from the map returns home.
+        // 5. Back from the map returns home.
         d.pressBack()
         d.waitFor("home again", 30f) { screen is HomeScreen }
         idle(0.5f)
         capture("home_again")
-        say("6. Back from the map → Home")
+        say("5. Back from the map → Home")
         d.onMain { assertTrue(map4.world === world) }
         return report.toString()
     }
@@ -191,7 +192,7 @@ class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean =
         d.waitFor("Level 6 laid out", 10f) { v.width > 0 }
         idle(1.4f)
         capture("level6_start")
-        say("5. Level 6 \"${l6.name}\" opens from the map (jet ski storm run)")
+        say("4. Level 6 \"${l6.name}\" opens from the map (jet ski storm run)")
 
         // Its own pause button opens the shared pause menu; Resume carries on.
         val pauseAt = d.onMain { val p = v.spec.pause; v.stageToView(p.cx, p.cy) }
@@ -277,32 +278,6 @@ class FlowChecklist(private val d: FlowDriver, private val playLevel4: Boolean =
         say("   back on World 1: Level 6 shows ${d.onMain { d.activity.flow.progress.stars(l6) }} stars, " +
             "World 2's gate is open (\"coming soon\")")
         return map4
-    }
-
-    private fun level4(map: com.islandblast.game.map.WorldMapView, l4: com.islandblast.game.levels.LevelDef,
-                       l5: com.islandblast.game.levels.LevelDef): com.islandblast.game.map.WorldMapView {
-        tap(d.onMain { map.nodeCenter(l4) })
-        d.waitFor("Level 4", 30f) { (screen as? LevelScreen)?.level == l4 }
-        val s4 = screen as LevelScreen
-        assertTrue("Level 4 is the slicing game", s4.play is SliceView)
-        d.waitFor("Level 4 laid out", 10f) { s4.play.view.width > 0 }
-        idle(0.4f)
-        capture("level4_start")
-        say("3. Level 4 \"${l4.name}\" opens from the map (treasure slicing)")
-        SliceChecklist(d, s4, ::capture, ::say).run()
-        finishLevel(s4, "level4")
-        d.waitFor("back on the map", 30f) { screen is MapScreen }
-        val map2 = (screen as MapScreen).map
-        idle(2.4f)
-        capture("map_after_level4")
-        val stars4 = d.onMain { d.activity.flow.progress.stars(l4) }
-        d.onMain {
-            assertTrue("Level 4 is recorded complete", d.activity.flow.progress.completed(l4))
-            assertEquals("the map shows Level 4's stars", s4.play.stars, stars4)
-            assertEquals("the marker moves on to Level 5", l5, map2.current)
-        }
-        say("   Continue → back on World 1: Level 4 shows $stars4 stars, the marker moves on to Level 5")
-        return map2
     }
 
     /** Waits for the result card, checks it, and taps Continue. */

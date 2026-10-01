@@ -23,6 +23,9 @@ import kotlin.math.abs
  *
  * The game clock is held while the harness plans and injects a swipe (on a slow
  * emulator that takes far longer than a player's flick); it runs between swipes.
+ *
+ * Not part of the World 1 flow while Mystic Harvest is off the map (it is not Level 4,
+ * Jungle Zip); run it from [FlowChecklist] again if the level is placed on a map.
  */
 class SliceChecklist(
     private val d: FlowDriver,

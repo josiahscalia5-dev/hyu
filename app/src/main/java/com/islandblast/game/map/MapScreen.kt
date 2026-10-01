@@ -41,11 +41,7 @@ import kotlin.math.sin
 class MapScreen(private val flow: GameFlow, val world: WorldDef, finished: LevelDef?) : Screen {
     val map: WorldMapView = WorldMapView(flow.context, world, AssetCache.get("map:${world.id}") { MapArt(flow.context.assets, world.id) },
         flow.ui, flow.progress, finished) { level ->
-        when {
-            level.playable -> flow.openLevel(level)
-            level.name.isNotEmpty() -> map.toast("${level.name} is coming soon!")
-            else -> map.toast("Level ${level.number} is coming soon!")
-        }
+        if (level.playable) flow.openLevel(level) else map.toast("Level ${level.number} is coming soon!")
     }.apply {
         onBack = { flow.openHome() }
         onGate = { gate ->
@@ -335,7 +331,7 @@ class WorldMapView(
             }
         } else {
             val size = 26f * scale
-            val label = "Soon"
+            val label = "Coming Soon"
             val tw = ui.text.measure(label, size)
             tmp.set(p.x - tw / 2f - 18f * scale, p.y + r * 1.2f, p.x + tw / 2f + 18f * scale, p.y + r * 1.2f + 42f * scale)
             ui.pill(c, tmp, scale, 0xB3101C3E.toInt())
