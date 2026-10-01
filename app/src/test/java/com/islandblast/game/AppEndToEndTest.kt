@@ -44,12 +44,14 @@ class AppEndToEndTest {
             .putExtra(MainActivity.EXTRA_LEVEL, 5)
         val activity = Robolectric.buildActivity(MainActivity::class.java, intent).setup().get()
         // Level art loads on a background thread behind a loading screen; wait for the game.
+        // Step the clock a frame at a time: the spinner keeps a frame pending, and until that
+        // frame runs its traversal barrier holds back the loader's "show the level" message.
         val content = activity.findViewById<ViewGroup>(android.R.id.content)
         val deadline = System.currentTimeMillis() + 180_000
         while (content.getChildAt(0) !is GameView) {
             check(System.currentTimeMillis() < deadline) { "level 5 did not finish loading" }
             Thread.sleep(20)
-            ShadowLooper.idleMainLooper()
+            ShadowLooper.idleMainLooper(16, TimeUnit.MILLISECONDS)
         }
         val gameView = content.getChildAt(0) as GameView
         if (gameView.width == 0) {
