@@ -7,9 +7,9 @@ import android.graphics.Typeface
 import com.islandblast.game.model.GameColor
 import com.islandblast.game.model.LevelSpec
 
-/** Bitmaps cut from the approved Level 5 reference (see tools/assets). */
-class Assets(private val am: AssetManager) {
-    val spec: LevelSpec = LevelSpec.parse(am.open("$DIR/level5.json").bufferedReader().use { it.readText() })
+/** A colour-shift level's art from the asset folder [dir] (Level 5's is cut from its approved reference by tools/assets). */
+class Assets(private val am: AssetManager, val dir: String = "level5") {
+    val spec: LevelSpec = LevelSpec.parse(am.open("$dir/level5.json").bufferedReader().use { it.readText() })
 
     private val opts = BitmapFactory.Options().apply {
         inScaled = false
@@ -21,7 +21,7 @@ class Assets(private val am: AssetManager) {
      * so it is marked density-free: Android must never rescale it for the screen.
      */
     private fun bmp(name: String): Bitmap =
-        (am.open("$DIR/$name").use { BitmapFactory.decodeStream(it, null, opts) } ?: error("Missing asset $name"))
+        (am.open("$dir/$name").use { BitmapFactory.decodeStream(it, null, opts) } ?: error("Missing asset $name"))
             .apply { density = Bitmap.DENSITY_NONE }
 
     private fun perColor(prefix: String) = GameColor.entries.associateWith { bmp("${prefix}_${it.key}.png") }
@@ -53,8 +53,4 @@ class Assets(private val am: AssetManager) {
 
     val fredoka: Typeface = Typeface.createFromAsset(am, "fonts/Fredoka-Bold.ttf")
     val nunito: Typeface = Typeface.createFromAsset(am, "fonts/Nunito-Black.ttf")
-
-    companion object {
-        const val DIR = "level5"
-    }
 }

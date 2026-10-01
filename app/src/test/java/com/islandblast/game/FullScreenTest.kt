@@ -113,13 +113,13 @@ class FullScreenTest {
 
     @Test
     fun level4FillsEveryPhoneShapeWithHudInsideTheSafeArea() {
-        val assets4 = TestLevel4.assets
+        val assets4 = TestSlice.assets
         val out4 = File(out.parentFile.parentFile, "level4-shots/phones").apply { mkdirs() }
         val report = StringBuilder()
         for (p in phones) {
             val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
             activity.resources.displayMetrics.density = p.density
-            val view = Level4View(activity, assets4)
+            val view = SliceView(activity, assets4, TestSlice.rules, 4, "Mystic Harvest")
             view.measure(
                 View.MeasureSpec.makeMeasureSpec(p.w, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(p.h, View.MeasureSpec.EXACTLY),

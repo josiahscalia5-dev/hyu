@@ -35,6 +35,9 @@ import kotlin.math.sin
  * ball, then HUD.
  */
 class Renderer(private val assets: Assets) {
+    /** Draw the pause and end cards here; off when a level host draws its own menus. */
+    var overlays = true
+
     private val spec = assets.spec
     private val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val fadePaint = Paint(Paint.FILTER_BITMAP_FLAG)
@@ -79,6 +82,7 @@ class Renderer(private val assets: Assets) {
         drawBall(c, game, now)
         drawHud(c, game, now, dt)
         drawGoalPanel(c, game, now)
+        if (!overlays) return
         when {
             game.phase == Phase.WON -> drawEndCard(c, game, "Level Complete!", "Tap to play again")
             game.phase == Phase.LOST -> drawEndCard(c, game, "Time's Up!", "Tap to try again")

@@ -1,66 +1,76 @@
 package com.islandblast.game
 
 import android.app.Activity
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import com.islandblast.game.render.Assets
-import com.islandblast.game.render.Level4Assets
+import android.widget.FrameLayout
+import android.window.OnBackInvokedDispatcher
+import com.islandblast.game.app.GameFlow
+import com.islandblast.game.app.Navigator
 
 /**
- * Opens Level 4 "Mystic Harvest"; its Level Complete card leads on to Level 5.
- * Start with the extra [EXTRA_LEVEL] = 5 to open Level 5 directly.
+ * The one activity: Home → World 1 map → a level → back to the map, all as screens
+ * inside it (see [GameFlow]). Start with [EXTRA_LEVEL] (a World 1 level number) to
+ * open that level directly.
  */
 class MainActivity : Activity() {
-    private lateinit var view: StageView
+    lateinit var flow: GameFlow
+        private set
+    private lateinit var navigator: Navigator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (android.os.Build.VERSION.SDK_INT >= 28) {
-            // Draw behind the camera cutout too; GameView keeps the HUD clear of it.
+        if (Build.VERSION.SDK_INT >= 28) {
+            // Draw behind the camera cutout too; every screen keeps its UI clear of it.
             window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode = if (android.os.Build.VERSION.SDK_INT >= 30) {
+                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= 30) {
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
                 } else {
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                 }
             }
         }
-        showLevel(intent.getIntExtra(EXTRA_LEVEL, 4))
+        val root = FrameLayout(this)
+        setContentView(root)
+        navigator = Navigator(root)
+        flow = GameFlow(this, navigator)
+        val direct = intent.getIntExtra(EXTRA_LEVEL, 0)
+        val level = flow.catalog.worlds.first().level(direct)
+        if (level != null && level.playable) flow.openLevel(level) else flow.openHome()
+        if (Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { back() }
+        }
         hideSystemBars()
     }
 
-    private fun showLevel(level: Int) {
-        if (::view.isInitialized) view.stop()
-        view = if (level == 5) {
-            GameView(this, Assets(assets))
-        } else {
-            Level4View(this, Level4Assets(assets)).apply { onNextLevel = { showLevel(5) } }
-        }
-        setContentView(view)
-        view.requestApplyInsets()
-        view.start()
+    /** The Android back button: each screen decides (level → pause, map → home, home → exit). */
+    fun back() {
+        if (navigator.current?.onBack() != true) finish()
     }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() = back()
 
     override fun onResume() {
         super.onResume()
         hideSystemBars()
-        view.start()
+        navigator.current?.start()
     }
 
     override fun onPause() {
-        when (val v = view) {
-            is GameView -> v.pauseGame()
-            is Level4View -> v.pauseGame()
+        navigator.current?.let {
+            it.onAppPause()
+            it.stop()
         }
-        view.stop()
         super.onPause()
     }
 
     private fun hideSystemBars() {
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
+        if (Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
             window.insetsController?.let {
                 it.hide(WindowInsets.Type.systemBars())
@@ -79,7 +89,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        /** Which level to open (4 or 5); Level 4 by default. */
+        /** Open this World 1 level directly instead of the home screen (testing). */
         const val EXTRA_LEVEL = "level"
     }
 }

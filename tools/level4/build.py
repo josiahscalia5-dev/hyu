@@ -7,9 +7,9 @@
   * t_<id>.png: each target cut out with its Segment Anything mask (masks/, made by
     segment.py), launcher.png likewise.
   * fx_glow.png / fx_debris.png: the burst of the opening frame. Glow and trail fade
-    where they are; loose debris flies apart (pieces listed in level4.json).
+    where they are; loose debris flies apart (pieces listed in layout.json).
   * star_gold.png, bar_fill.png: HUD pieces that change during play.
-  * level4.json: layout, hit shapes, text fits.
+  * layout.json: layout, hit shapes, text fits.
 
   export LAMA_MODEL=/path/to/big-lama.pt
   python3 tools/level4/build.py [work dir]
@@ -318,6 +318,12 @@ def merge_overlapping(boxes):
     return boxes
 
 
+def hud_zone():
+    """Where the painted timer, score and combo values sit (with a margin)."""
+    return rect_mask([(l - 12, t - 12, r + 12, b + 12) for l, t, r, b in
+                      (layout.TIMER_PANEL, layout.SCORE_PANEL, layout.COMBO_BOX)])
+
+
 def intro_fx(ref, plate, hole, objects):
     """What the frame-0 burst adds over plate + sprites: fading glow, flying debris."""
     owned = np.zeros((H, W), bool)
@@ -326,6 +332,8 @@ def intro_fx(ref, plate, hole, objects):
     fx = hole & ~owned
     fx |= (np.abs(ref.astype(np.int16) - plate.astype(np.int16)).sum(axis=2) > 24) & ~owned & \
         (cv2.dilate(hole.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0)
+    # The painted HUD values are not part of the burst: the live HUD replaces them.
+    fx &= ~hud_zone()
     hsv = cv2.cvtColor(ref, cv2.COLOR_RGB2HSV).astype(np.int16)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     vivid = fx & (s > 130) & (v > 110) & ~poly_mask(layout.TRAIL)
@@ -441,6 +449,9 @@ def build(work):
     ref = np.array(Image.open(REF).convert("RGB"))
     objects = object_masks()
     plate, hole, _ = build_plate(ref, objects, work)
+    # Open water where the burst was, and an empty plaque (stars are earned in play).
+    import lagoon
+    plate = lagoon.empty_stars(lagoon.paint_lagoon(ref, plate, lagoon.hole_mask(ref)))
     Image.fromarray(plate).save(os.path.join(OUT, "background.png"), optimize=True)
     Image.fromarray(extend(plate)).save(os.path.join(OUT, "background_ext.png"), optimize=True)
     targets = sprites(ref, objects)
@@ -470,7 +481,7 @@ def build(work):
                      for k, v in text.items()},
         },
     }
-    with open(os.path.join(OUT, "level4.json"), "w") as f:
+    with open(os.path.join(OUT, "layout.json"), "w") as f:
         json.dump(spec, f, indent=1)
     print(len(targets), "targets")
     return spec

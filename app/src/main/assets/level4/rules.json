@@ -1,0 +1,18 @@
+{
+  "_doc": "Level 4 'Mystic Harvest' settings (treasure-slice). Missing keys use SliceRules defaults.",
+  "seconds": 60,
+  "starScores": [3000, 18000, 50000],
+  "comboWindow": 1.0,
+  "maxMultiplier": 8,
+  "barrelSeconds": 2,
+  "chestHits": 3,
+  "tossEvery": [1.7, 0.9],
+  "tossCount": [1, 2, 2, 4],
+  "weights": {"gem": 5, "coin": 3, "crate": 2, "barrel": 1.2, "chest": 0.7},
+  "points": {"gem": 15, "coin": 20, "crate": 10, "barrel": 15, "chest": 60},
+  "bigGemPoints": 30,
+  "chestHitPoints": 10,
+  "lootCount": 5,
+  "swipeBonus": 10,
+  "seed": 4
+}

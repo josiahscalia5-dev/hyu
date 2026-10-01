@@ -1,6 +1,5 @@
 package com.islandblast.game
 
-import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -8,23 +7,27 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import com.islandblast.game.e2e.Driver
-import com.islandblast.game.e2e.Level5Checklist
+import com.islandblast.game.e2e.FlowChecklist
+import com.islandblast.game.e2e.FlowDriver
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Plays Level 5 on a real device/emulator: real frame loop and real time, touches
- * injected through the input system, and every screen check done on actual
- * screenshots from the display. Screenshots are saved to the app's external files
- * dir under e2e/ (adb pull /sdcard/Android/data/com.islandblast.game/files/e2e).
+ * The whole game on a real device/emulator: launched like a player launches it, real
+ * frame loop and real time, touches injected through the input system, every screen
+ * checked on real screenshots of the display:
+ * Home → PLAY → World 1 → Level 4 → Level Complete → World 1 → Level 5 →
+ * Level Complete → World 1 → Back → Home.
+ * Screenshots and the report go to the app's external files dir under e2e/
+ * (adb pull /sdcard/Android/data/com.islandblast.game/files/e2e).
  *
  * The game redraws every frame, so its main thread is never idle: nothing here may
  * wait for idle (no ActivityScenario, no sendPointerSync).
@@ -32,11 +35,11 @@ import java.io.File
 @RunWith(AndroidJUnit4::class)
 class DeviceEndToEndTest {
     private val inst = InstrumentationRegistry.getInstrumentation()
-    private var activity: Activity? = null
+    private var launched: MainActivity? = null
 
     @After
     fun finish() {
-        activity?.let { a -> inst.runOnMainSync { a.finish() } }
+        launched?.let { a -> inst.runOnMainSync { a.finish() } }
     }
 
     private fun <T> onMain(block: () -> T): T {
@@ -46,22 +49,20 @@ class DeviceEndToEndTest {
     }
 
     @Test
-    fun playLevel5OnDevice() {
+    fun playTheGameOnDevice() {
         val target = inst.targetContext
-        target.startActivity(Intent(target, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            .putExtra(MainActivity.EXTRA_LEVEL, 5))
-        val deadline = SystemClock.uptimeMillis() + 120_000
-        while (activity == null) {
+        target.getSharedPreferences(com.islandblast.game.levels.Progress.PREFS, 0).edit().clear().commit()
+        target.startActivity(Intent(target, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val deadline = SystemClock.uptimeMillis() + 180_000
+        while (launched == null) {
             check(SystemClock.uptimeMillis() < deadline) { "MainActivity did not resume" }
             SystemClock.sleep(200)
-            activity = onMain {
+            launched = onMain {
                 ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
-                    .firstOrNull { it is MainActivity }
+                    .firstOrNull { it is MainActivity } as MainActivity?
             }
         }
-        val gameView = onMain {
-            activity!!.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as GameView
-        }
+        val app = launched!!
         val outDir = File(target.getExternalFilesDir(null), "e2e").apply {
             deleteRecursively()
             mkdirs()
@@ -70,16 +71,17 @@ class DeviceEndToEndTest {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inScaled = false })!!
         }
         val slow = (InstrumentationRegistry.getArguments().getString("slow") ?: "20").toFloat()
+        val content: View = onMain { app.findViewById<ViewGroup>(android.R.id.content) }
 
-        val driver = object : Driver {
-            override val view = gameView
-            override val background: Bitmap = plate
+        val driver = object : FlowDriver {
+            override val activity = app
+            override val level5Background: Bitmap = plate
             private var downTime = 0L
 
             override fun <T> onMain(block: () -> T): T = this@DeviceEndToEndTest.onMain(block)
 
             override fun touch(action: Int, x: Float, y: Float) {
-                val loc = onMain { IntArray(2).also { view.getLocationOnScreen(it) } }
+                val loc = onMain { IntArray(2).also { content.getLocationOnScreen(it) } }
                 val now = SystemClock.uptimeMillis()
                 if (action == MotionEvent.ACTION_DOWN) downTime = now
                 val e = MotionEvent.obtain(downTime, now, action, loc[0] + x, loc[1] + y, 0)
@@ -96,11 +98,13 @@ class DeviceEndToEndTest {
                 }
             }
 
+            override fun idle(seconds: Float) = SystemClock.sleep((seconds * 1000).toLong())
+
             override fun screenshot(): Bitmap {
                 var full = inst.uiAutomation.takeScreenshot()
                 if (full.config != Bitmap.Config.ARGB_8888) full = full.copy(Bitmap.Config.ARGB_8888, false)
-                val loc = onMain { IntArray(2).also { view.getLocationOnScreen(it) } }
-                return Bitmap.createBitmap(full, loc[0], loc[1], view.width, view.height)
+                val loc = onMain { IntArray(2).also { content.getLocationOnScreen(it) } }
+                return Bitmap.createBitmap(full, loc[0], loc[1], content.width, content.height)
             }
 
             override fun save(bmp: Bitmap, name: String) {
@@ -108,10 +112,12 @@ class DeviceEndToEndTest {
             }
 
             override fun log(line: String) {
-                Log.i("Level5E2E", line)
+                Log.i("IslandBlastE2E", line)
             }
+
+            override fun pressBack() = onMain { app.back() }
         }
-        val report = Level5Checklist(driver).run()
+        val report = FlowChecklist(driver).run()
         File(outDir, "report.txt").writeText(report)
     }
 }

@@ -12,6 +12,7 @@ import kotlin.math.abs
 
 /** How the checklist talks to a running app (Robolectric or a real device). */
 interface Driver {
+    /** The Level 5 view now on screen. */
     val view: GameView
     val background: Bitmap
 
@@ -37,7 +38,7 @@ interface Driver {
  *  2. aiming + shooting at matching blocks             7. the colour shift repeats after each clear
  *  3. the matching group is really cleared (and gone    8. play continues until the board is empty
  *     from the screen: no leftover fragments)          9. score, combo, timer, stars, coins update
- *  4. touching blocks change colour, on screen too     10. Level Complete is reached; tap restarts
+ *  4. touching blocks change colour, on screen too     10. Level Complete is reached
  *  5. the ball changes to the next colour, on screen
  */
 class Level5Checklist(private val d: Driver) {
@@ -200,16 +201,6 @@ class Level5Checklist(private val d: Driver) {
         say("10. Level Complete after $shots shots ($shifts colour shifts, $switches ball taps): " +
             "score ${game.score}, ${game.stars} stars, +${game.coins} coins, ${game.timerSeconds}s left")
 
-        d.waitFor("restart to be allowed", 30f) { d.view.canRestart }
-        val c = d.view.stageToView(game.spec.stageW / 2f, game.spec.stageH * 0.6f)
-        d.touch(MotionEvent.ACTION_DOWN, c.x, c.y)
-        d.touch(MotionEvent.ACTION_UP, c.x, c.y)
-        d.waitFor("restart", 30f) { !game.over }
-        d.onMain {
-            assertEquals("tap restarts the level", 31, game.board.aliveCount)
-            assertEquals(Phase.READY, game.phase)
-        }
-        say("    tap on the Level Complete card restarts the level (31 blocks, ${game.color.key} ball)")
         hold(false)
         return report.toString()
     }
