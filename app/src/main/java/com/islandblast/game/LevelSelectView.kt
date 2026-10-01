@@ -18,7 +18,7 @@ import android.view.View
 import kotlin.math.max
 import kotlin.math.min
 
-/** Start screen: pick Level 5 (Color Shift) or Level 6 (Storm Dodge). */
+/** Start screen: pick Level 5 (Temple Chase) or Level 6 (Storm Dodge). */
 @SuppressLint("ViewConstructor")
 class LevelSelectView(context: Context, private val am: AssetManager, private val onPick: (Int) -> Unit) : View(context) {
     private class Card(val level: Int, val title: String, val subtitle: String, val thumb: Bitmap, val crop: Rect)
@@ -29,7 +29,7 @@ class LevelSelectView(context: Context, private val am: AssetManager, private va
     // Thumbnails are the approved level designs (assets/menu, made from design/*.png).
     private val bg = load("menu/background.jpg")
     private val cards = listOf(
-        load("menu/level5.jpg").let { Card(5, "Level 5", "Color Shift", it, Rect(0, it.height * 26 / 100, it.width, it.height * 56 / 100)) },
+        load("menu/level5.jpg").let { Card(5, "Level 5", "Temple Chase", it, Rect(0, it.height * 30 / 100, it.width, it.height * 60 / 100)) },
         load("menu/level6.jpg").let { Card(6, "Level 6", "Storm Dodge", it, Rect(0, it.height * 36 / 100, it.width, it.height * 66 / 100)) },
     )
     private val text = GameText(Typeface.createFromAsset(am, "fonts/Fredoka-Bold.ttf"))

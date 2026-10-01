@@ -640,10 +640,24 @@ def build_sprites(ref):
     empty = np.clip(navy * (0.7 + 0.8 * lum), 0, 255).astype(np.uint8)
     Image.fromarray(np.dstack([empty, heart[..., 3]]), "RGBA").save(os.path.join(OUT, "heart_empty.png"))
     meta["heart_empty"] = dict(meta["heart"])
-    import build_sprites as level5_sprites  # star matte (gold or dark star, holes filled)
-    for name, box in (("star_gold", L.STARS[0]), ("star_empty", L.STARS[2])):
-        l, t, r, b = box
-        cut(name, ref, box, level5_sprites.star_mask(ref, box) / 255.0, meta)
+    # stars: the painted gold star's shape (with its dark outline); the empty star is the same
+    # shape in the bar's dark navy, like the painted one
+    l, t, r, b = L.STARS[0]
+    crop = ref[t:b, l:r]
+    hsv = cv2.cvtColor(crop, cv2.COLOR_RGB2HSV).astype(int)
+    gold = (hsv[..., 0] >= 14) & (hsv[..., 0] <= 42) & (hsv[..., 1] > 80) & (hsv[..., 2] > 130)
+    gold = cv2.morphologyEx(gold.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    # the next star's tip touches this one: split them, keep this star
+    core = C.largest(cv2.erode(gold, np.ones((7, 7), np.uint8)))
+    gold = C.fill_holes((cv2.dilate(core.astype(np.uint8), np.ones((11, 11), np.uint8)) > 0) & (gold > 0))
+    gold[211 - t:, 483 - l:] = False  # the next star's lower-left point
+    a = cv2.GaussianBlur(cv2.dilate(gold.astype(np.uint8) * 255, np.ones((5, 5), np.uint8)), (0, 0), 0.9) / 255.0
+    cut("star_gold", ref, L.STARS[0], a, meta)
+    star = np.array(Image.open(os.path.join(OUT, "star_gold.png")))
+    lum = star[..., :3].astype(np.float32).mean(-1, keepdims=True) / 255
+    empty = np.clip(navy * (0.6 + 0.9 * lum), 0, 255).astype(np.uint8)
+    Image.fromarray(np.dstack([empty, star[..., 3]]), "RGBA").save(os.path.join(OUT, "star_empty.png"))
+    meta["star_empty"] = dict(meta["star_gold"])
     return meta
 
 

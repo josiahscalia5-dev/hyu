@@ -19,7 +19,12 @@ class LoadingView(context: Context, am: AssetManager, level: Int) : View(context
     private val opts = BitmapFactory.Options().apply { inScaled = false }
     private val bg = am.open("menu/background.jpg").use { BitmapFactory.decodeStream(it, null, opts)!! }
     private val text = GameText(Typeface.createFromAsset(am, "fonts/Fredoka-Bold.ttf"))
-    private val title = if (level == 6) "STORM DODGE" else "COLOR SHIFT"
+    private val number = if (level == MainActivity.LEVEL_COLOR_SHIFT) 5 else level
+    private val title = when (level) {
+        5 -> "TEMPLE CHASE"
+        6 -> "STORM DODGE"
+        else -> "COLOR SHIFT"
+    }
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -35,7 +40,7 @@ class LoadingView(context: Context, am: AssetManager, level: Int) : View(context
         c.drawBitmap(bg, null, RectF((w - bg.width * k) / 2f, (h - bg.height * k) / 2f, (w + bg.width * k) / 2f, (h + bg.height * k) / 2f), paint)
         c.drawColor(0x66000000)
         val u = min(w / 1080f, h / 2000f)
-        text.white(c, "Level ${if (title == "STORM DODGE") 6 else 5}", w / 2f, h * 0.4f, 60f * u, align = Paint.Align.CENTER)
+        text.white(c, "Level $number", w / 2f, h * 0.4f, 60f * u, align = Paint.Align.CENTER)
         text.gold(c, title, w / 2f, h * 0.4f + 110f * u, 110f * u)
         val t = (SystemClock.uptimeMillis() - start) / 1000f
         val r = 60f * u

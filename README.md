@@ -1,7 +1,70 @@
 # Island Blast — Levels 5 and 6
 
-The app opens on a level select screen: **Level 5 (Color Shift)** and
+The app opens on a level select screen: **Level 5 (Temple Chase)** and
 **Level 6 (Storm Dodge)**. Back returns to it.
+
+## Level 5 — Temple Chase
+
+Spec: `design/level5_temple_chase_reference.png`. Everything on screen is cut
+from that painting by `tools/temple/build_temple.py`. The opening frame is the
+painting itself (`design/renders/temple_frame0_vs_reference.png`). From there:
+
+- **The world moves, the painting stays recognisable.**
+  - The temple, the golem, the lavafalls, the far towers and the top HUD are a static
+    backdrop.
+  - The stone path scrolls toward the runner. It is a sharp, seamless texture
+    unprojected from the painted path near the camera.
+  - The side scenery is separate 3D props cut from the painting: block stacks with the
+    lavafall, the chevron blocks, the rope fence, platforms and palms. They pass by at
+    their own depth and keep their shape; nothing is stretched with the ground.
+  - The lava is molten cells coloured from the painted lava's own colours, with a hot rim
+    along the path, a slow shimmer, and embers.
+- **Controls:**
+  - The arrow buttons move one lane; dragging anywhere steers under the finger.
+  - The lightning, shield and magnet buttons use a power-up (3 each, as painted).
+  - Pause button: pause.
+- **Hazards:**
+  - Lava boulders thrown by the golem roll down the path.
+  - Stone chevron blocks stand in lanes.
+  - A hit costs a heart (2 hearts, as painted), slows the runner, and gives a moment
+    without hits. Losing both hearts means CAUGHT.
+- **Pickups:** coins (+10, coin counter), gems (+50), and lightning/shield/magnet tokens
+  (+1 to that button).
+- **Power-ups:**
+  - **Lightning:** 3.5 s sprint at 1.55x speed that smashes through hazards (+30 each).
+  - **Shield:** absorbs one hit (10 s).
+  - **Magnet:** pulls in coins and gems from all lanes (8 s).
+- **Sections:** Lava Path, Boulder Alley, Golem's Wrath, Temple Escape.
+  - Speed and hazards rise section by section.
+  - Each new section is a checkpoint that adds time. The timer starts at 0:35, as painted.
+  - Every hazard row leaves an open lane, and it moves at most one lane per row.
+- **Score and stars:** the level opens as painted (1,960 points, 124 coins, 2 of 3 stars).
+  - Stars light up at 1,000, 1,500 and 4,500 points.
+  - Escaping adds +20 per second left and +250 per heart left.
+- **End:**
+  - **TEMPLE ESCAPED!** shows the stars and a tally. Tap to run again.
+  - **CAUGHT!** and **OUT OF TIME!** offer a retry.
+
+Tests:
+
+- `TempleRulesTest`: the rules. A careful bot escapes with 0 hits and 3 stars, and a bot
+  without power-ups still escapes.
+- `TempleScreenshotTest`: plays the whole level through `TempleView` with real taps on
+  the arrows and every power-up button, including one deliberate crash. Frames are written
+  to `app/build/temple-shots/`.
+- `TempleFullScreenTest`: five phone shapes, with the HUD in the safe area and the runner
+  clear of the buttons.
+- `TempleAppTest`: the real app. The level select's Level 5 card opens Temple Chase, it
+  runs, the arrows steer, and Back returns.
+
+Art: `LAMA_MODEL=/path/big-lama.pt python3 tools/temple/build_temple.py`. Add `--reuse` to
+keep the inpainted plates. `tools/temple/preview.py` renders scrolled frames for quick
+checks.
+
+The earlier Level 5 prototype (Color Shift, documented below) is no longer in the menu.
+Its code and tests remain; launch it with the intent extra `level=50`.
+
+---
 
 ## Level 6 — Storm Dodge
 
@@ -39,9 +102,9 @@ finishes with zero hits. `StormScreenshotTest` plays to the finish through
 
 ---
 
-# Level 5
+# Color Shift (earlier Level 5 prototype, not in the menu)
 
-Android (Kotlin, API 26+) implementation of the approved Level 5 screen with the
+Android (Kotlin, API 26+) implementation of the first approved Level 5 screen with the
 colour-shift shooting mechanic.
 
 - `design/level5_reference.png`: the approved screen, which is the visual spec.

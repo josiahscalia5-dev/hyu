@@ -9,14 +9,19 @@ import android.view.WindowManager
 import com.islandblast.game.level6.StormAssets
 import com.islandblast.game.level6.StormView
 import com.islandblast.game.render.Assets
+import com.islandblast.game.temple.TempleAssets
+import com.islandblast.game.temple.TempleView
 
 /**
- * Opens on the level select screen. Back from a level returns to it.
- * Launch straight into a level with the intent extra "level" (5 or 6).
+ * Opens on the level select screen: Level 5 (Temple Chase) and Level 6 (Storm Dodge).
+ * Back from a level returns to it. Launch straight into a level with the intent extra
+ * "level" (5 or 6; [LEVEL_COLOR_SHIFT] opens the earlier Color Shift prototype, which is
+ * no longer in the menu).
  */
 class MainActivity : Activity() {
-    private var level5: GameView? = null
+    private var level5: TempleView? = null
     private var level6: StormView? = null
+    private var colorShift: GameView? = null
     private var current: View? = null
     private var loadRequest = 0
 
@@ -33,9 +38,8 @@ class MainActivity : Activity() {
                 }
             }
         }
-        when (intent?.getIntExtra(EXTRA_LEVEL, 0)) {
-            5 -> openLevel(5)
-            6 -> openLevel(6)
+        when (val level = intent?.getIntExtra(EXTRA_LEVEL, 0)) {
+            5, 6, LEVEL_COLOR_SHIFT -> openLevel(level)
             else -> showLevelSelect()
         }
         hideSystemBars()
@@ -57,7 +61,11 @@ class MainActivity : Activity() {
         val request = ++loadRequest
         Thread {
             val loaded: Any = try {
-                if (level == 6) StormAssets(assets) else Assets(assets)
+                when (level) {
+                    5 -> TempleAssets(assets)
+                    6 -> StormAssets(assets)
+                    else -> Assets(assets)
+                }
             } catch (e: Throwable) {
                 // Never leave the player stuck on the loading screen: report and go back.
                 android.util.Log.e("IslandBlast", "Loading level $level failed", e)
@@ -66,10 +74,10 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 if (request != loadRequest || isFinishing) return@runOnUiThread
-                val v: View = if (loaded is StormAssets) {
-                    StormView(this, loaded).also { level6 = it; it.start() }
-                } else {
-                    GameView(this, loaded as Assets).also { level5 = it; it.start() }
+                val v: View = when (loaded) {
+                    is TempleAssets -> TempleView(this, loaded).also { level5 = it; it.start() }
+                    is StormAssets -> StormView(this, loaded).also { level6 = it; it.start() }
+                    else -> GameView(this, loaded as Assets).also { colorShift = it; it.start() }
                 }
                 show(v)
             }
@@ -85,6 +93,7 @@ class MainActivity : Activity() {
     private fun stopCurrent() {
         level5?.stop(); level5 = null
         level6?.stop(); level6 = null
+        colorShift?.stop(); colorShift = null
     }
 
     @Deprecated("Back returns from a level to the level select screen")
@@ -98,11 +107,13 @@ class MainActivity : Activity() {
         hideSystemBars()
         level5?.start()
         level6?.start()
+        colorShift?.start()
     }
 
     override fun onPause() {
         level5?.apply { pauseGame(); stop() }
         level6?.apply { pauseGame(); stop() }
+        colorShift?.apply { pauseGame(); stop() }
         super.onPause()
     }
 
@@ -127,5 +138,7 @@ class MainActivity : Activity() {
 
     companion object {
         const val EXTRA_LEVEL = "level"
+        /** The earlier Level 5 prototype (Color Shift), kept for its tests; not in the menu. */
+        const val LEVEL_COLOR_SHIFT = 50
     }
 }

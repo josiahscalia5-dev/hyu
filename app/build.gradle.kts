@@ -11,14 +11,25 @@ android {
         applicationId = "com.islandblast.game"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.5.0"
+        versionCode = 3
+        versionName = "0.7.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     sourceSets {
         // End-to-end checklist shared by the Robolectric and on-device tests.
         getByName("test").java.srcDir("src/sharedTest/java")
         getByName("androidTest").java.srcDir("src/sharedTest/java")
+    }
+
+    signingConfigs {
+        // One shared debug key in the repo, so every build of the debug APK installs over the
+        // last one on a phone (a fresh machine would otherwise sign with a new random key).
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
