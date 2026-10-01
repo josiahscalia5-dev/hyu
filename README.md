@@ -221,8 +221,14 @@ adb shell am instrument -w -e class com.islandblast.game.DeviceEndToEndTest \
 adb pull /sdcard/Android/data/com.islandblast.game/files/e2e   # screenshots + report
 ```
 
-The harness holds the game clock while it plans a swipe or shot and reads
-screenshots; the clock runs between moves.
+Add `-e skipLevel4 true` to start from Level 5: on a software-emulated device (no
+KVM) Level 4 alone takes about an hour. The harness holds the game clock while it
+plans a swipe or shot and reads screenshots; the clock runs between moves.
+
+Verified on an Android 11 emulator (1080×2400) with real injected touches. One run
+went through Home → World 1 → Level 4 to Level Complete → World 1 → Level 5, and a
+second through Level 5 to Level Complete → World 1 → Back → Home.
+`design/renders/device_emulator_flow.png` shows the emulator's own screenshots.
 
 Other tests:
 
@@ -233,6 +239,7 @@ Other tests:
 | `SliceScreenshotTest` | Level 4 frames to `app/build/level4-shots/` |
 | `ScreensFitTest` | Home and the map on five phone shapes (20:9 punch-hole, 19.5:9 notch, 16:9, 21:9 cutout, 720×1600): nothing cut off, all inside the safe area |
 | `FullScreenTest` | The same five shapes for Levels 4 and 5 |
+| `design/renders/` | `flow.png` (the journey), `level4_slicing.png`, `home_phones.png`, `map_phones.png`, `device_emulator_flow.png` |
 | `ColorShiftRulesTest`, `PlaythroughTest`, `ScreenshotTest` | Level 5's rules, a full bot playthrough, and frame-0 fidelity to its design |
 
 ## Regenerating the art

@@ -119,7 +119,9 @@ class DeviceEndToEndTest {
 
             override fun pressBack() = onMain { app.back() }
         }
-        val report = FlowChecklist(driver).run()
+        // -e skipLevel4 true: Level 4 takes about an hour on a software-emulated device.
+        val skip4 = InstrumentationRegistry.getArguments().getString("skipLevel4") == "true"
+        val report = FlowChecklist(driver, playLevel4 = !skip4).run()
         File(outDir, "report.txt").writeText(report)
     }
 }

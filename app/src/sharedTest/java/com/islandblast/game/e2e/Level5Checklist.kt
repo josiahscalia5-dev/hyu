@@ -169,7 +169,11 @@ class Level5Checklist(private val d: Driver) {
                 assertEquals("coins", before.coins + game.rules.coinsPerBlock * n, game.coins)
                 assertEquals("stars", game.rules.starThresholds.count { game.score >= it }, game.stars)
                 val expectLeft = before.timeLeft + game.rules.timeBonusPerBlock * n - (game.time - before.time)
-                assertTrue("timer: got ${game.timeLeft}, expected $expectLeft", abs(game.timeLeft - expectLeft) < 1e-3f)
+                // Once the level is won its timer stops while game time runs on for the win
+                // effects, so a frame or two after the win may count in game time only.
+                val slack = if (game.phase == Phase.WON) 0.25f else 0f
+                assertTrue("timer: got ${game.timeLeft}, expected $expectLeft",
+                    game.timeLeft >= expectLeft - 1e-3f && game.timeLeft <= expectLeft + slack + 1e-3f)
             }
 
             val won = d.onMain { game.phase == Phase.WON }
