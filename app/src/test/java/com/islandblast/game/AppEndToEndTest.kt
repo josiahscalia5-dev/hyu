@@ -40,7 +40,9 @@ class AppEndToEndTest {
     fun playLevel5ThroughTheUi() {
         ShadowChoreographer.setPaused(true)
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(16))
-        val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        val intent = android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_LEVEL, 5)
+        val activity = Robolectric.buildActivity(MainActivity::class.java, intent).setup().get()
         val gameView = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as GameView
         if (gameView.width == 0) {
             gameView.measure(

@@ -1,4 +1,45 @@
-# Island Blast — Level 5
+# Island Blast — Levels 5 and 6
+
+The app opens on a level select screen: **Level 5 (Color Shift)** and
+**Level 6 (Storm Dodge)**. Back returns to it.
+
+## Level 6 — Storm Dodge
+
+Spec: `design/level6_storm_dodge_reference.png`. Art cut from it by
+`tools/level6/build6.py`: sky plate with the HUD and lightning, extended past
+every edge; a seamless water tile quilted from open river; the jet ski,
+barrels, spiked mine, X-crate, logs, coins, shield and X hazard sprites.
+
+- **Controls:** the arrow buttons move one lane; dragging anywhere steers
+  under the finger. Pause button: pause.
+- **River:** a perspective river scrolling toward the jet ski, with storm
+  waves, rain, lightning strikes and flashes, and spray from the jet ski.
+- **Hazards:** barrels, mines, logs, crates and X hazards all collide.
+  - A hit costs 150 points and knocks the ski back.
+  - The ski slows for a moment and flickers while it can't be hit again.
+  - Debris bursts and the screen shakes.
+- **Collectibles:** coins in lines, curves and risky clusters beside hazards
+  (+10 each). Blue shields (+50) absorb exactly one collision ("BLOCKED!").
+- **Sections:** Calm Storm, Stronger Current, Heavy Storm, Storm Escape, then
+  Temple Finish. Speed and hazard density rise section by section. Each new
+  section is a checkpoint that adds time (the timer starts at 0:36 as
+  painted).
+- **Fairness:** the open lane moves at most one lane per row, so a clean line
+  always exists. Debris drifting along the banks is scenery, out of reach.
+- **Finish:** the storm calms and you ride through the torch-lit gate into the
+  temple. The tally adds a time bonus (+40/s left) and a no-hit bonus
+  (+500).
+- **Stars:** 3 for at least 70% of coins and at most 1 hit; 2 for up to 4
+  hits; otherwise 1.
+
+Tests: `StormRulesTest` covers the rules. It includes a careful bot that
+finishes with zero hits. `StormScreenshotTest` plays to the finish through
+`StormView`, with one deliberate crash and a shield pickup.
+`StormFullScreenTest` covers five phone shapes.
+
+---
+
+# Level 5
 
 Android (Kotlin, API 26+) implementation of the approved Level 5 screen with the
 colour-shift shooting mechanic.

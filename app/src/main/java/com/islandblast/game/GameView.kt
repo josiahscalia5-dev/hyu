@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PointF
 import android.graphics.RectF
-import android.os.Build
 import android.os.SystemClock
 import android.view.Choreographer
 import android.view.MotionEvent
@@ -86,23 +85,7 @@ class GameView(context: Context, private val assets: Assets) : View(context), Ch
     private fun pad() = 6f * resources.displayMetrics.density
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
-        var l = 0; var t = 0; var r = 0; var b = 0
-        insets.displayCutout?.let {
-            l = it.safeInsetLeft; t = it.safeInsetTop; r = it.safeInsetRight; b = it.safeInsetBottom
-        }
-        if (Build.VERSION.SDK_INT >= 30) {
-            // Bars are hidden while playing; if the user swipes them in, keep clear of them.
-            val vis = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-            l = maxOf(l, vis.left); t = maxOf(t, vis.top); r = maxOf(r, vis.right); b = maxOf(b, vis.bottom)
-            // Rounded corners: keep the HUD a little further in on phones that report them.
-            if (Build.VERSION.SDK_INT >= 31) {
-                val tl = insets.getRoundedCorner(android.view.RoundedCorner.POSITION_TOP_LEFT)?.radius ?: 0
-                val bl = insets.getRoundedCorner(android.view.RoundedCorner.POSITION_BOTTOM_LEFT)?.radius ?: 0
-                val corner = (maxOf(tl, bl) * 0.3f).toInt()
-                l = maxOf(l, corner); r = maxOf(r, corner)
-                t = maxOf(t, corner); b = maxOf(b, corner)
-            }
-        }
+        val (l, t, r, b) = StageFit.safeInsets(insets)
         safe[0] = l; safe[1] = t; safe[2] = r; safe[3] = b
         fitStage()
         invalidate()
