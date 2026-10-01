@@ -173,6 +173,13 @@ class StormView(context: Context, private val assets: StormAssets) : View(contex
 
     private fun near(x: Float, y: Float, c: FloatArray) = hypot(x - c[0], y - c[1]) <= c[2] * 1.15f
 
+    /** For the visual preview: show a given game (e.g. a composed layout). */
+    fun replaceGameForPreview(g: StormGame) {
+        game = g
+        renderer.reset()
+        overSince = 0L
+    }
+
     fun restart() {
         game = StormGame()
         renderer.reset()

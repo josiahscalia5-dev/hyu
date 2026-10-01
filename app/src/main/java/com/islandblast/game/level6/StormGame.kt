@@ -48,8 +48,9 @@ sealed class StormEvent {
  * lanes); controls set a target and the ski glides there. Objects are fixed in the
  * river; the ski collides with a hazard when their x and z footprints overlap.
  */
-class StormGame(val rules: StormRules = StormRules(), seed: Int = 6) {
-    val objects: List<Placed> = StormCourse.build(seed)
+class StormGame(val rules: StormRules = StormRules(), seed: Int = 6, course: List<Placed>? = null) {
+    /** The river's objects: the Level 6 course, or a given layout (used for the visual preview). */
+    val objects: List<Placed> = course ?: StormCourse.build(seed)
     private val taken = HashSet<Placed>()
     val events = ArrayList<StormEvent>()
 
