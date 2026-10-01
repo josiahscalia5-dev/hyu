@@ -1,53 +1,70 @@
 # Island Blast
 
-Android (Kotlin, API 26+) game with three screens in one app:
+Android (Kotlin, API 26+) game, all in one app:
 
-**Home → World 1 map → Level 4 or Level 5 → Level Complete → back to the World 1 map**
+**Home → World 1 map → Levels 1–6 → Level 6 Complete → World 1 Complete → World 2 Unlocked → back to the World 1 map**
 
 | Screen | What it is | Approved reference |
 |---|---|---|
 | Home | Title screen: logo, character, PLAY, top bar, bottom nav | `design/home_reference_upload.png` |
-| World 1 map | "Tropical Islands": levels 1–10 on a chain of islands; tap a level to play it | none (designed for this app) |
+| World 1 map | "Tropical Islands": Levels 1–6 on a chain of islands, then the gate to World 2; tap a level to play it | none (designed for this app) |
+| Levels 1–3 "Relic Ricochet", "Totem Sequence", "Coral Current" | Coming soon (not built yet) | none yet |
 | Level 4 "Mystic Harvest" | Treasure slicing: swipe to cut gems, coins, crates, barrels and chests | `design/level4_reference.png` |
-| Level 5 "Temple of Colours" | Colour-shift block shooting (unchanged gameplay) | `design/level5_fullscreen_reference.png` |
+| Level 5 "Temple Chase" | Colour-shift block shooting (unchanged gameplay) | `design/level5_fullscreen_reference.png` |
+| Level 6 "Storm Dodge" | Jet ski down a stormy river, dodging hazards (unchanged gameplay) | `design/level6_storm_dodge_reference.png` |
+| World 1 Complete | After Level 6's Level Complete: every World 1 level and its stars, then "World 2 Unlocked!" | none (designed for this app) |
 
-The app opens on Home. PLAY (or the Levels tile) opens the World 1 map. Levels 4
-and 5 are playable; the other buttons are the rest of World 1, shown as "coming
-soon" until they are built. Finishing a level shows Level Complete with its stars.
-**Continue** returns to the map, where the stars are saved and the player marker
-moves on. Android Back pauses a level (and resumes it), goes from the map to Home,
+The app opens on Home. PLAY (or the Levels tile) opens the World 1 map. Levels 4,
+5 and 6 are playable; Levels 1–3 are shown as "coming soon" until they are built.
+Finishing a level shows Level Complete with its stars. **Continue** returns to the
+map, where the stars are saved and the player marker moves on to the next level.
+Level 6 is World 1's last level: the first time it is completed, Continue leads to
+**World 1 Complete** and **World 2 Unlocked**, then back to the map, where the gate
+to World 2 is now open (World 2 itself is not built yet: its gate says "coming
+soon"). Android Back pauses a level (and resumes it), goes from the map to Home,
 and from Home closes the app.
 
-## Architecture: adding Level 6, 7, 8…
+This app is the merge of two lines of work (both kept as backup branches
+`backup/2026-10-01/ccr-e0caed5f-med9a2` and `backup/2026-10-01/ccr-95596f48-cuc437`):
+the Home / World 1 map / Levels 4–5 app was the base, and Level 6 Storm Dodge was
+brought in from the other line as a new level on the World 1 map. That line's
+simple level-select screen was not kept: Home and the World 1 map replace it.
+
+## Architecture: adding levels and worlds
 
 Every screen lives in one activity (`MainActivity`). `app/GameFlow` moves between
 them and `app/Navigator` shows one at a time. Levels are data:
 
 - **`assets/worlds.json`** lists every world and level: number, name, map position
   and, for a playable level, its `kind` (which gameplay) and `dir` (its asset
-  folder). A level with no `kind` shows on the map as coming soon.
+  folder). A level with no `kind` shows on the map as coming soon. A world's
+  `gate` is the way on to the next world, at the end of its map's path.
 - **`levels/LevelKinds`** maps each kind to code that builds the level:
-  `treasure-slice` (Level 4) and `color-shift` (Level 5).
+  `treasure-slice` (Level 4), `color-shift` (Level 5) and `storm-dodge` (Level 6).
 - **`levels/LevelPlay`** is what every level gives the host: its view, state,
   score, stars and goal, plus pause and restart.
 - **`levels/LevelScreen`** hosts any level. It draws the pause menu (Resume,
   Restart, World Map) and the result card (Replay and Continue, or Map and Try
   Again). It saves the result in `levels/Progress` (best stars and score per
   level) and returns to the map.
+- **`app/GameFlow.continueAfter`** decides where Continue goes: after a world's last
+  level (the first time), `map/WorldCompleteScreen`, which records the world
+  complete and unlocks the next one (`Progress.completeWorld`); otherwise the map.
 
 To add **another level of an existing kind** (no code changes):
 
-1. Put its art and settings in a new asset folder, e.g. `assets/level6/`, in the
-   same format as `level4/` (slicing: `layout.json`, sprites, `rules.json`) or
-   `level5/` (colour shift).
-2. In `worlds.json`, give level 6 a `"name"`, `"kind"` and `"dir": "level6"`.
+1. Put its art and settings in a new asset folder, e.g. `assets/level7/`, in the
+   same format as `level4/` (slicing: `layout.json`, sprites, `rules.json`),
+   `level5/` (colour shift) or `level6/` (storm dodge).
+2. In `worlds.json`, give the level a `"name"`, `"kind"` and `"dir"`.
    An optional `"config"` overrides any setting in its `rules.json`, e.g.
    `"config": {"seconds": 45, "starScores": [4000, 20000, 60000]}`.
 
 To add a **new kind of gameplay**, write a view that extends `StageView` and
 implements `LevelPlay`, then register one `LevelKind` for it in `LevelKinds`. To add
 **World 2**, add a world to `worlds.json` and its map to
-`assets/maps/<world id>/` (`map.json` and the backdrop).
+`assets/maps/<world id>/` (`map.json` and the backdrop), then make World 1's gate
+open it (`MapScreen`'s `onGate`) once `Progress.worldUnlocked(2)`.
 
 ## Home screen
 
@@ -79,10 +96,13 @@ the path crosses water. Level 4's island has its treasure chest and gems; Level
 - the stars earned (empty stars show what is left);
 - its name, for built levels.
 
-A lock and "Soon" mark levels not built yet. The next level to play glows and
-carries the player's marker; after Continue the marker walks over to the next
-level. The header shows the world, a back button and the stars earned in the
-world. The map covers the screen edge to edge but is never scaled so far that a
+A lock and "Soon" mark levels not built yet (tapping one names it: "Relic Ricochet
+is coming soon!"). The next level to play glows and carries the player's marker;
+after Continue the marker walks over to the next level. Level 6 sits on the island
+after Level 5, and the path runs on over the bridge to the **World 2 gate**: grey
+with a padlock until World 1 is complete, then green and glowing (the path to it
+turns gold). The header shows the world, a back button and the stars earned in the
+world (out of 9: three playable levels). The map covers the screen edge to edge but is never scaled so far that a
 level button leaves the safe area.
 
 ## Level 4 "Mystic Harvest": treasure slicing
@@ -143,7 +163,7 @@ sparkles. This replaces the misty patch left where the burst was painted out,
 which would otherwise sit mid-screen all level. It also empties the plaque's
 painted stars, since stars are earned in play.
 
-## Level 5 "Temple of Colours": colour-shift blocks
+## Level 5 "Temple Chase": colour-shift blocks
 
 Unchanged gameplay and art (cut from `design/level5_fullscreen_reference.png`).
 The pause menu and Level Complete card are now the shared ones, so Level Complete
@@ -166,11 +186,77 @@ Scoring: each clear adds `10 × blocks × combo` points and 1 coin per block. St
 are earned at 1,000, 1,500 and 4,000 points. Values are in `Rules` in
 `model/Level5Game.kt`.
 
+## Level 6 "Storm Dodge": jet ski storm run
+
+Spec: `design/level6_storm_dodge_reference.png`. Art cut from it by
+`tools/level6/build6.py`: sky plate with the HUD and lightning, extended past
+every edge; a seamless water tile quilted from open river; the jet ski,
+barrels, spiked mine, X-crate, logs, coins, shield and X hazard sprites. Gameplay
+and art are as on its own branch (awaiting your review of
+`design/renders/level6_preview.png`); in this app its pause menu and Level
+Complete / Time's Up card are the shared ones, like Levels 4 and 5, so it leads
+back to the map and on to World 1 Complete.
+
+- **Controls:** the arrow buttons move one lane; dragging anywhere steers
+  under the finger. Pause button: the pause menu.
+- **River:** a perspective river scrolling toward the jet ski, with storm
+  waves, rain, lightning strikes and flashes, and spray from the jet ski.
+- **Hazards:** barrels, mines, logs, crates and X hazards all collide.
+  - A hit costs 150 points and knocks the ski back.
+  - The ski slows for a moment and flickers while it can't be hit again.
+  - Debris bursts and the screen shakes.
+- **Collectibles:** coins in lines, curves and risky clusters beside hazards
+  (+10 each). Blue shields (+50) absorb exactly one collision ("BLOCKED!").
+- **Sections:** Calm Storm, Stronger Current, Heavy Storm, Storm Escape, then
+  Temple Finish. Speed and hazard density rise section by section. Each new
+  section is a checkpoint that adds time (the timer starts at 0:36 as
+  painted).
+- **Fairness:** the open lane moves at most one lane per row, so a clean line
+  always exists. Debris drifting along the banks is scenery, out of reach.
+- **Finish:** the storm calms and you ride through the torch-lit gate into the
+  temple, with a burst of confetti; then Level Complete. The score adds a time
+  bonus (+40/s left) and a no-hit bonus (+500). Running out of time gives
+  Time's Up (Map or Try Again).
+- **Stars:** 3 for at least 70% of coins and at most 1 hit; 2 for up to 4
+  hits; otherwise 1.
+
+## World 1 Complete → World 2 Unlocked
+
+The first time Level 6 is completed, Continue on its Level Complete card opens
+this screen over the dimmed World 1 map, with sunbeams and confetti:
+
+1. **"World 1 Complete!"**: Tropical Islands, every World 1 level (stars earned on
+   the built ones, locks on the ones still to come) and the world's star total.
+2. **"World 2 Unlocked!"** pops in, the padlock springing off the World 2 button.
+3. **Continue** returns to the World 1 map: Level 6's stars pop in and World 2's
+   gate is open. A tap skips straight to Continue; Back does the same as Continue.
+
+Replaying Level 6 later goes straight back to the map.
+
 ## Decisions to review
 
-- **Levels 1–3 and 6–10** are on the map as "coming soon", since only Levels 4 and
-  5 have designs. Both built levels are open from the start, so either can be
-  played first. The marker points to the first one not yet completed.
+- **Level 4 is "Mystic Harvest", not "Jungle Zip".** The World 1 list names Level 4
+  "Jungle Zip", but no Jungle Zip implementation, design or asset exists on any
+  branch of this repository; the approved Level 4 design
+  (`design/level4_reference.png`) is itself titled "Level 4 Mystic Harvest". It is
+  kept, unchanged, as the base branch had it. If Jungle Zip should replace it,
+  Mystic Harvest's slot is one entry in `worlds.json`.
+- **Level 5 is named "Temple Chase"** (World 1 list). Its old name, "Temple of
+  Colours", was a placeholder; the gameplay and art are unchanged.
+- **Levels 1–3** ("Relic Ricochet", "Totem Sequence", "Coral Current") are on the
+  map as "coming soon": nothing for them exists in this repository yet.
+- **World 1 is Levels 1–6.** The map had ten buttons (7–10 coming soon); 7–10 are
+  gone and the World 2 gate stands on Level 7's old island. The map art is
+  unchanged, so the islands at the top are scenery for now.
+
+- **All built levels are open from the start** (4, 5 and 6), as on the base
+  branch, so any can be played (and previewed) first. The marker points to the
+  first one not yet completed, so it leads 4 → 5 → 6. World 1 Complete comes when
+  Level 6, the last level, is completed.
+- **Level 6's own end card** ("STORM SURVIVED!" with the coins/hits tally, "Tap to
+  ride again") and its tap-to-resume pause screen are replaced in the app by the
+  shared Level Complete / Time's Up card and pause menu, as Level 5's were. Its
+  HUD, river and art are unchanged.
 - **Level 4 starts fresh** (score 0, 1:00, no stars), so it has a real start and
   goal. The painted "1,240", "0:28" and "Combo x8" were a mid-game snapshot.
   **Level 5 still opens as painted** (score 1,760, 0:36, two stars), as before;
@@ -178,8 +264,6 @@ are earned at 1,000, 1,500 and 4,000 points. Values are in `Rules` in
 - **Level 4's level length:** each barrel adds 2 s, so a player who slices every
   barrel plays past 60 s. Set `"barrelSeconds": 0` to keep it at exactly a
   minute.
-- **Level 5's name**, "Temple of Colours", is a placeholder (the design has no
-  title); change `name` in `worlds.json`.
 - **The World 1 map** had no reference, so it was designed for this app.
 - **Home's coins, gems and "Lv. 12"** are the painted values.
 - **Font:** Fredoka Bold, the closest open-licence match to the painted lettering.
@@ -194,11 +278,12 @@ are earned at 1,000, 1,500 and 4,000 points. Values are in `Rules` in
 **`GameFlowTest` is the whole game end to end**, with real touches through the real
 `MainActivity`: Home → PLAY → World 1 → Level 4 played to Level Complete →
 Continue → World 1 → Level 5 played to Level Complete → Continue → World 1 →
-Back → Home. On the way it checks:
+Level 6 played to Level Complete → Continue → World 1 Complete → World 2 Unlocked →
+Continue → World 1 → Back → Home. On the way it checks:
 
 - **Home:** everything is on screen.
-- **Map:** every level button is on screen. A coming-soon level keeps you on the
-  map.
+- **Map:** World 1 is Levels 1–6; every level button and the World 2 gate are on
+  screen. A coming-soon level, and the locked gate, keep you on the map.
 - **Level 4** (`SliceChecklist`), with real swipes:
   - every crossed treasure is cut and its two halves fly;
   - chests lose one hit per swipe and then spill loot;
@@ -208,7 +293,12 @@ Back → Home. On the way it checks:
   - time up gives Level Complete.
 - **Level 5** (`Level5Checklist`): each shot's clears, one-step colour shifts,
   next ball and HUD, plus on-screen colour checks.
+- **Level 6:** its pause button opens the pause menu (the river stops) and Resume
+  carries on; then it is ridden to the temple with real taps on the arrow buttons
+  (a bot picks the lane), to Level Complete.
 - **After each level:** the map shows the saved stars and the marker has moved.
+- **World 1 Complete:** World 1 is recorded complete and World 2 unlocked; both
+  cards and Continue are on screen; back on the map the gate is open.
 
 Screens go to `app/build/flow/`.
 
@@ -225,10 +315,15 @@ Add `-e skipLevel4 true` to start from Level 5: on a software-emulated device (n
 KVM) Level 4 alone takes about an hour. The harness holds the game clock while it
 plans a swipe or shot and reads screenshots; the clock runs between moves.
 
-Verified on an Android 11 emulator (1080×2400) with real injected touches. One run
-went through Home → World 1 → Level 4 to Level Complete → World 1 → Level 5, and a
-second through Level 5 to Level Complete → World 1 → Back → Home.
-`design/renders/device_emulator_flow.png` shows the emulator's own screenshots.
+Before the Level 6 merge (version 0.6.0) this was verified on an Android 11
+emulator (1080×2400) with real injected touches. One run went through Home → World 1
+→ Level 4 to Level Complete → World 1 → Level 5, and a second through Level 5 to
+Level Complete → World 1 → Back → Home. `design/renders/device_emulator_flow.png`
+shows the emulator's own screenshots. Level 6 had passed its own checks on an
+emulator on its branch (`design/renders/level6_on_emulator.png`). The merged app
+(0.7.0) is verified by `GameFlowTest` above; the device run of the extended
+checklist (now through Level 6 and World 1 Complete) has not been repeated on an
+emulator yet.
 
 Other tests:
 
@@ -237,8 +332,9 @@ Other tests:
 | `SliceRulesTest` | Cutting, slow drags, misses, chests and loot, barrels, combo chain and reset, drops, multi-cut bonus, the intro, win/lose, pause |
 | `SlicePlaythroughTest` | Level 4's balance, with the three players above |
 | `SliceScreenshotTest` | Level 4 frames to `app/build/level4-shots/` |
-| `ScreensFitTest` | Home and the map on five phone shapes (20:9 punch-hole, 19.5:9 notch, 16:9, 21:9 cutout, 720×1600): nothing cut off, all inside the safe area |
+| `ScreensFitTest` | Home, the map (with the World 2 gate) and World 1 Complete on five phone shapes (20:9 punch-hole, 19.5:9 notch, 16:9, 21:9 cutout, 720×1600): nothing cut off, all inside the safe area; World 1's levels, names and kinds |
 | `FullScreenTest` | The same five shapes for Levels 4 and 5 |
+| `StormRulesTest`, `StormScreenshotTest`, `StormFullScreenTest`, `StormPreviewTest` | Level 6's rules (with a careful bot that finishes with zero hits), a played run's frames to `app/build/level6-shots/`, five phone shapes, and the preview render `design/renders/level6_preview.png` |
 | `design/renders/` | `flow.png` (the journey), `level4_slicing.png`, `home_phones.png`, `map_phones.png`, `device_emulator_flow.png` |
 | `ColorShiftRulesTest`, `PlaythroughTest`, `ScreenshotTest` | Level 5's rules, a full bot playthrough, and frame-0 fidelity to its design |
 
@@ -251,6 +347,7 @@ python3 tools/home/segment.py && python3 tools/home/build.py /tmp/home_work   # 
 python3 tools/map/build.py                                                    # World 1 map
 python3 tools/level4/build.py /tmp/level4_work                                # Level 4 (runs lagoon.py too)
 python3 tools/assets/build_plate.py /tmp/level5_work && python3 tools/assets/build_sprites.py /tmp/level5_work
+python3 tools/level6/build6.py                                                # Level 6
 ```
 
 LaMa redraws a ghost of whatever a tight, object-shaped hole held. The build

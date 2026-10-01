@@ -32,8 +32,18 @@ class WorldDef(val id: String, val number: Int, val name: String) {
     lateinit var levels: List<LevelDef>
         internal set
 
+    /** The way on to the next world, at the end of this world's path (null for the last world). */
+    var gate: WorldGate? = null
+        internal set
+
     fun level(number: Int): LevelDef? = levels.firstOrNull { it.number == number }
+
+    /** The world's final level: finishing it completes the world. */
+    val lastLevel: LevelDef get() = levels.last()
 }
+
+/** The gate to World [to], drawn on the map where its button sits (map-art pixels). */
+class WorldGate(val to: Int, val nodeX: Float, val nodeY: Float)
 
 /**
  * Every world and level in the game, read from assets/worlds.json. Adding a level is
@@ -70,6 +80,10 @@ class Catalog(val worlds: List<WorldDef>) {
                         config = l.optJSONObject("config") ?: JSONObject(),
                     )
                 }.sortedBy { it.number }
+                w.optJSONObject("gate")?.let { g ->
+                    val node = g.getJSONArray("node")
+                    world.gate = WorldGate(g.getInt("to"), node.getDouble(0).toFloat(), node.getDouble(1).toFloat())
+                }
                 world
             }
             return Catalog(worlds)

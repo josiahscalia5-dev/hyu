@@ -13,10 +13,12 @@ import com.islandblast.game.levels.Progress
 import com.islandblast.game.levels.WorldDef
 import com.islandblast.game.map.MapArt
 import com.islandblast.game.map.MapScreen
+import com.islandblast.game.map.WorldCompleteScreen
 import com.islandblast.game.ui.UiKit
 
 /**
- * The game's flow: Home → World map → a level → back to the map. Every screen asks
+ * The game's flow: Home → World map → a level → back to the map; after a world's last
+ * level, World Complete (next world unlocked) → back to the map. Every screen asks
  * this to move on, so the whole navigation lives here.
  */
 class GameFlow(val context: Context, val navigator: Navigator) {
@@ -42,6 +44,20 @@ class GameFlow(val context: Context, val navigator: Navigator) {
         whenLoaded(AssetCache.contains(key), "World ${world.number}", world.name,
             load = { AssetCache.get(key) { MapArt(context.assets, world.id) } },
             show = { navigator.show(MapScreen(this, world, finished)) })
+    }
+
+    /**
+     * Continue on a won level's result card: after the world's last level, the first
+     * time, World Complete (which unlocks the next world); otherwise back to the map.
+     */
+    fun continueAfter(level: LevelDef) {
+        val world = level.world
+        if (level == world.lastLevel && world.gate != null && !progress.worldComplete(world)) {
+            progress.completeWorld(world)
+            navigator.show(WorldCompleteScreen(this, world, level))
+        } else {
+            openMap(world, finished = level)
+        }
     }
 
     fun openLevel(level: LevelDef) {

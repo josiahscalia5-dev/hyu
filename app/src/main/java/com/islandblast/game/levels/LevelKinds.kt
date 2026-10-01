@@ -4,6 +4,8 @@ import android.content.Context
 import com.islandblast.game.GameView
 import com.islandblast.game.SliceView
 import com.islandblast.game.StageView
+import com.islandblast.game.level6.StormAssets
+import com.islandblast.game.level6.StormView
 import com.islandblast.game.model.SliceRules
 import com.islandblast.game.render.Assets
 import com.islandblast.game.render.SliceAssets
@@ -79,6 +81,19 @@ object LevelKinds {
 
             private fun assets(context: Context, level: LevelDef) =
                 AssetCache.get("colorshift:${level.dir}") { Assets(context.assets, level.dir!!) }
+        },
+        // Ride a jet ski down a stormy river, dodging hazards (Level 6).
+        "storm-dodge" to object : LevelKind {
+            override fun create(context: Context, level: LevelDef): LevelPlay = StormView(context, assets(context, level))
+
+            override fun preload(context: Context, level: LevelDef) {
+                assets(context, level)
+            }
+
+            override fun loaded(level: LevelDef) = AssetCache.contains("storm:${level.dir}")
+
+            private fun assets(context: Context, level: LevelDef) =
+                AssetCache.get("storm:${level.dir}") { StormAssets(context.assets, level.dir!!) }
         },
     )
 

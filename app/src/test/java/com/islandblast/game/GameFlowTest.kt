@@ -25,7 +25,8 @@ import java.util.concurrent.TimeUnit
  * The whole app on a 1080x2400 phone, through the real MainActivity, real
  * MotionEvents and the real Choreographer frame loop (on a simulated clock):
  * Home → PLAY → World 1 → Level 4 → Level Complete → World 1 → Level 5 →
- * Level Complete → World 1 → Back → Home. Screens are saved to app/build/flow/.
+ * Level Complete → World 1 → Level 6 → Level Complete → World 1 Complete →
+ * World 2 Unlocked → World 1 → Back → Home. Screens are saved to app/build/flow/.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -38,7 +39,7 @@ class GameFlowTest {
     }
 
     @Test
-    fun homeToWorldMapToLevel4ThenLevel5AndBack() {
+    fun homeToWorldMapThroughLevels4To6AndWorldComplete() {
         ShadowChoreographer.setPaused(true)
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(16))
         val activity = Robolectric.buildActivity(MainActivity::class.java).setup().get()

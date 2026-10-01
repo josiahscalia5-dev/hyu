@@ -23,7 +23,8 @@ import kotlin.math.roundToInt
 
 /**
  * Hosts any level: its own full-screen view, with the pause menu and the result card
- * drawn on top. Records the result and leads back to the world map.
+ * drawn on top. Records the result and leads back to the world map (or, after the
+ * world's last level, to World Complete).
  */
 class LevelScreen(private val flow: GameFlow, val level: LevelDef, val play: LevelPlay) : Screen {
     val overlay = LevelOverlay(flow.context, flow.ui, level, play, ::act)
@@ -75,7 +76,7 @@ class LevelScreen(private val flow: GameFlow, val level: LevelDef, val play: Lev
                 recorded = false
             }
             LevelOverlay.Action.MAP -> flow.openMap(level.world)
-            LevelOverlay.Action.CONTINUE -> flow.openMap(level.world, finished = level)
+            LevelOverlay.Action.CONTINUE -> flow.continueAfter(level)
         }
     }
 

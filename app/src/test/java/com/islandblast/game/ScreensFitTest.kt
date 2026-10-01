@@ -9,8 +9,10 @@ import com.islandblast.game.home.HomeView
 import com.islandblast.game.levels.Catalog
 import com.islandblast.game.levels.Progress
 import com.islandblast.game.map.MapArt
+import com.islandblast.game.map.WorldCompleteView
 import com.islandblast.game.map.WorldMapView
 import com.islandblast.game.ui.UiKit
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,10 +25,11 @@ import org.robolectric.shadows.ShadowChoreographer
 import java.io.File
 
 /**
- * The home screen and the World 1 map on real phone shapes. Everything that matters
- * must be fully on screen and inside the safe area (camera cutout, bars): on Home the
- * logo, PLAY, the top bar and the bottom nav; on the map every level button and the
- * header. Edges must be painted scenery, not bars. Frames go to app/build/screens/.
+ * The home screen, the World 1 map and World 1 Complete on real phone shapes.
+ * Everything that matters must be fully on screen and inside the safe area (camera
+ * cutout, bars): on Home the logo, PLAY, the top bar and the bottom nav; on the map
+ * every level button, the World 2 gate and the header; on World Complete both cards
+ * and Continue. Edges must be painted scenery, not bars. Frames go to app/build/screens/.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -123,8 +126,55 @@ class ScreensFitTest {
                     c.y + r * 1.9f), p.inset[0].toFloat(), p.inset[1].toFloat(), (p.w - p.inset[2]).toFloat(),
                     (p.h - p.inset[3]).toFloat())
             }
+            val g = v.gateCenter()!!
+            inside("${p.name}: World 2 gate", android.graphics.RectF(g.x - r * 1.3f, g.y - r * 1.3f, g.x + r * 1.3f,
+                g.y + r * 2.1f), p.inset[0].toFloat(), p.inset[1].toFloat(), (p.w - p.inset[2]).toFloat(),
+                (p.h - p.inset[3]).toFloat())
             val back = v.backCenter()
             assertTrue("${p.name}: back button below the cutout", back.y - 60f >= p.inset[1])
+            edges(px, p.w, p.h, p.name)
+        }
+    }
+
+    @Test
+    fun worldOneHasLevelsOneToSixEndingWithStormDodge() {
+        val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        val world = Catalog.load(activity.assets).worlds.first()
+        assertEquals((1..6).toList(), world.levels.map { it.number })
+        assertEquals(listOf("Relic Ricochet", "Totem Sequence", "Coral Current", "Mystic Harvest", "Temple Chase", "Storm Dodge"),
+            world.levels.map { it.name })
+        assertEquals(listOf(null, null, null, "treasure-slice", "color-shift", "storm-dodge"), world.levels.map { it.kind })
+        assertEquals(listOf(4, 5, 6), world.levels.filter { it.playable }.map { it.number })
+        assertEquals(world.level(6), world.lastLevel)
+        assertEquals(2, world.gate!!.to)
+        val progress = Progress(activity).apply { clear() }
+        assertTrue("World 2 starts locked", !progress.worldUnlocked(2) && !progress.worldComplete(world))
+        progress.completeWorld(world)
+        assertTrue("completing World 1 unlocks World 2", progress.worldUnlocked(2) && progress.worldComplete(world))
+        progress.clear()
+    }
+
+    @Test
+    fun worldCompleteFitsEveryPhone() {
+        for (p in phones) {
+            val activity = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+            activity.resources.displayMetrics.density = p.density
+            val world = Catalog.load(activity.assets).worlds.first()
+            val progress = Progress(activity)
+            val v = WorldCompleteView(activity, world, UiKit(activity.assets), progress, MapArt(activity.assets, world.id)) {}
+            v.measure(View.MeasureSpec.makeMeasureSpec(p.w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(p.h, View.MeasureSpec.EXACTLY))
+            v.layout(0, 0, p.w, p.h)
+            v.setSafeInsetsForTest(p.inset[0], p.inset[1], p.inset[2], p.inset[3])
+            v.loop.start()
+            repeat(200) { v.loop.doFrame(1_000_000_000L + it * 16_000_000L) }
+            v.loop.stop()
+            assertTrue("${p.name}: World 2 card and Continue are up", v.unlockShown && v.ready)
+            val px = draw(v, p, "world_complete_${p.name}")
+            for ((name, box) in v.mustShow()) {
+                inside("${p.name}: World Complete $name", box, p.inset[0].toFloat(), p.inset[1].toFloat(),
+                    (p.w - p.inset[2]).toFloat(), (p.h - p.inset[3]).toFloat())
+            }
             edges(px, p.w, p.h, p.name)
         }
     }

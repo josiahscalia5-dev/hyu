@@ -3,8 +3,10 @@
     "Every world and level in Island Blast. A level with a 'kind' is playable; one without is",
     "shown on the map as coming soon. To add a level of an existing kind, give it a 'kind' and",
     "a 'dir' (asset folder with its art and settings). Kinds: 'treasure-slice' (Level 4),",
-    "'color-shift' (Level 5). 'node' is where its button sits on the world map (map-art px).",
-    "'config' (optional) overrides keys of the level's own settings file."
+    "'color-shift' (Level 5), 'storm-dodge' (Level 6). 'node' is where its button sits on the",
+    "world map (map-art px). 'config' (optional) overrides keys of the level's own settings file.",
+    "'gate' is the way on to the next world, at the end of the map's path: finishing the world's",
+    "last level completes the world and unlocks it."
   ],
   "worlds": [
     {
@@ -12,17 +14,14 @@
       "number": 1,
       "name": "Tropical Islands",
       "levels": [
-        {"number": 1, "node": [300, 2085]},
-        {"number": 2, "node": [640, 2000]},
-        {"number": 3, "node": [850, 1800]},
+        {"number": 1, "name": "Relic Ricochet", "node": [300, 2085]},
+        {"number": 2, "name": "Totem Sequence", "node": [640, 2000]},
+        {"number": 3, "name": "Coral Current", "node": [850, 1800]},
         {"number": 4, "name": "Mystic Harvest", "kind": "treasure-slice", "dir": "level4", "node": [610, 1590]},
-        {"number": 5, "name": "Temple of Colours", "kind": "color-shift", "dir": "level5", "node": [290, 1400]},
-        {"number": 6, "node": [460, 1180]},
-        {"number": 7, "node": [790, 1040]},
-        {"number": 8, "node": [620, 850]},
-        {"number": 9, "node": [300, 720]},
-        {"number": 10, "node": [560, 540]}
-      ]
+        {"number": 5, "name": "Temple Chase", "kind": "color-shift", "dir": "level5", "node": [290, 1400]},
+        {"number": 6, "name": "Storm Dodge", "kind": "storm-dodge", "dir": "level6", "node": [460, 1180]}
+      ],
+      "gate": {"to": 2, "node": [790, 1040]}
     }
   ]
 }

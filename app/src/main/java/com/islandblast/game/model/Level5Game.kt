@@ -100,6 +100,10 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
     var lastTimeBonusAt = -10f
         private set
 
+    /** Game time the level was won or lost (-1 while playing); the countdown stops there. */
+    var endedAt = -1f
+        private set
+
     /** Game time of the most recent successful clear (drives the combo pop). */
     var lastClearAt = -10f
         private set
@@ -142,6 +146,7 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
         if (timeLeft <= 0f && !over) {
             timeLeft = 0f
             phase = Phase.LOST
+            endedAt = time
             events += GameEvent.Lost
         }
     }
@@ -374,6 +379,7 @@ class Level5Game(val spec: LevelSpec, val rules: Rules = Rules()) {
             score += rules.clearBonusPerSecond * timerSeconds
             updateStars()
             phase = Phase.WON
+            endedAt = time
             events += GameEvent.Won
             return
         }

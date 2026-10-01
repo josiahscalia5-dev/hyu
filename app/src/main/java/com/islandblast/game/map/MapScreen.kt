@@ -26,6 +26,7 @@ import com.islandblast.game.levels.LevelDef
 import com.islandblast.game.levels.LevelKinds
 import com.islandblast.game.levels.Progress
 import com.islandblast.game.levels.WorldDef
+import com.islandblast.game.levels.WorldGate
 import com.islandblast.game.ui.ButtonStyle
 import com.islandblast.game.ui.Icon
 import com.islandblast.game.ui.UiKit
@@ -40,8 +41,18 @@ import kotlin.math.sin
 class MapScreen(private val flow: GameFlow, val world: WorldDef, finished: LevelDef?) : Screen {
     val map: WorldMapView = WorldMapView(flow.context, world, AssetCache.get("map:${world.id}") { MapArt(flow.context.assets, world.id) },
         flow.ui, flow.progress, finished) { level ->
-        if (level.playable) flow.openLevel(level) else map.toast("Level ${level.number} is coming soon!")
-    }.apply { onBack = { flow.openHome() } }
+        when {
+            level.playable -> flow.openLevel(level)
+            level.name.isNotEmpty() -> map.toast("${level.name} is coming soon!")
+            else -> map.toast("Level ${level.number} is coming soon!")
+        }
+    }.apply {
+        onBack = { flow.openHome() }
+        onGate = { gate ->
+            map.toast(if (flow.progress.worldUnlocked(gate.to)) "World ${gate.to} is coming soon!"
+            else "Finish World ${world.number} to unlock World ${gate.to}!")
+        }
+    }
     override val view: View get() = map
 
     override fun start() {
@@ -87,6 +98,7 @@ class WorldMapView(
     private val onLevel: (LevelDef) -> Unit,
 ) : View(context) {
     var onBack: () -> Unit = {}
+    var onGate: (WorldGate) -> Unit = {}
     val loop = FrameLoop { dt ->
         time += dt
         invalidate()
@@ -150,11 +162,12 @@ class WorldMapView(
         backR = 62f * k
         backBtn.set(area.left + 20f * k + backR, area.top + hh * 0.5f)
         // The level buttons (with room for their stars and labels) must fit below the header.
-        val nodes = world.levels
-        val l = nodes.minOf { it.nodeX } - NODE_ROOM
-        val r = nodes.maxOf { it.nodeX } + NODE_ROOM
-        val t = nodes.minOf { it.nodeY } - NODE_ROOM - 40f
-        val b = nodes.maxOf { it.nodeY } + NODE_ROOM + 30f
+        val xs = world.levels.map { it.nodeX } + listOfNotNull(world.gate?.nodeX)
+        val ys = world.levels.map { it.nodeY } + listOfNotNull(world.gate?.nodeY)
+        val l = xs.min() - NODE_ROOM
+        val r = xs.max() + NODE_ROOM
+        val t = ys.min() - NODE_ROOM - 40f
+        val b = ys.max() + NODE_ROOM + 30f
         val room = RectF(area.left, header.bottom, area.right, area.bottom)
         val cover = max(w / art.w, h / art.h)
         val fitNodes = min(room.width() / (r - l), room.height() / (b - t))
@@ -177,6 +190,9 @@ class WorldMapView(
 
     fun nodeRadius(): Float = NODE_R * scale
 
+    /** Centre of the gate to the next world in view pixels, if the world has one (tests tap it). */
+    fun gateCenter(): PointF? = world.gate?.let { toView(it.nodeX, it.nodeY) }
+
     fun backCenter(): PointF = PointF(backBtn.x, backBtn.y)
 
     override fun onDraw(c: Canvas) {
@@ -191,6 +207,7 @@ class WorldMapView(
         c.drawBitmap(art.backdrop, null, tmp, bmp)
         drawPath(c)
         for (level in world.levels) drawNode(c, level)
+        drawGate(c)
         drawPin(c)
         drawHeader(c)
         val tk = time - toastAt
@@ -209,8 +226,11 @@ class WorldMapView(
 
     /** Stepping-stone dots along a smooth curve through the level buttons. */
     private fun drawPath(c: Canvas) {
-        val pts = world.levels.map { toView(it.nodeX, it.nodeY) }
-        val reached = world.levels.indexOfLast { progress.completed(it) }
+        val gate = world.gate
+        val pts = world.levels.map { toView(it.nodeX, it.nodeY) } + listOfNotNull(gate?.let { toView(it.nodeX, it.nodeY) })
+        // The path is gold up to the last level completed (and on to the gate once the world is complete).
+        val reached = if (gate != null && progress.worldComplete(world)) pts.size - 1
+        else world.levels.indexOfLast { progress.completed(it) }
         val gap = 34f * scale
         for (i in 0 until pts.size - 1) {
             val p0 = pts[max(0, i - 1)]
@@ -324,6 +344,51 @@ class WorldMapView(
         }
     }
 
+    /**
+     * The gate to the next world at the end of the path: locked (grey, padlock) until
+     * this world is complete, then green and glowing with the next world's number.
+     */
+    private fun drawGate(c: Canvas) {
+        val gate = world.gate ?: return
+        val p = toView(gate.nodeX, gate.nodeY)
+        val r = NODE_R * scale * 1.08f
+        val open = progress.worldUnlocked(gate.to)
+        if (open) {
+            val g = 0.5f + 0.5f * sin(time * 3f)
+            fill.shader = RadialGradient(p.x, p.y, r * 2f, intArrayOf(0xCCB8FF8A.toInt(), 0x0060FF40), null,
+                Shader.TileMode.CLAMP)
+            c.drawCircle(p.x, p.y, r * (1.7f + 0.2f * g), fill)
+            fill.shader = null
+        }
+        c.save()
+        val press = if (pressed == gate) 0.92f else 1f
+        c.scale(press, press, p.x, p.y)
+        fill.shader = null
+        fill.color = 0x66000000
+        c.drawCircle(p.x, p.y + r * 0.16f, r * 1.12f, fill)
+        fill.shader = LinearGradient(0f, p.y - r * 1.15f, 0f, p.y + r * 1.15f, 0xFFFFE680.toInt(), 0xFFC07A10.toInt(),
+            Shader.TileMode.CLAMP)
+        c.drawCircle(p.x, p.y, r * 1.14f, fill)
+        fill.shader = null
+        stroke.color = 0xFF5A2E04.toInt()
+        stroke.strokeWidth = r * 0.08f
+        c.drawCircle(p.x, p.y, r * 1.14f, stroke)
+        ui.roundButton(c, p.x, p.y - r * 0.04f, r * 0.9f, if (open) ButtonStyle.GREEN else ButtonStyle.GRAY, null, false, k)
+        if (open) {
+            ui.text.white(c, "${gate.to}", p.x, p.y + r * 0.38f, r * 1.05f, Color.WHITE, Paint.Align.CENTER, outline = 1.1f)
+        } else {
+            ui.drawIcon(c, Icon.LOCK, p.x, p.y - r * 0.05f, r * 0.42f, Color.WHITE, 0xFF20263A.toInt(), k)
+        }
+        c.restore()
+        val label = "World ${gate.to}"
+        val size = 30f * scale
+        val tw = ui.text.measure(label, size)
+        tmp.set(p.x - tw / 2f - 22f * scale, p.y + r * 1.24f, p.x + tw / 2f + 22f * scale, p.y + r * 1.24f + 50f * scale)
+        ui.pill(c, tmp, scale, if (open) 0xD9101C3E.toInt() else 0xB3101C3E.toInt())
+        ui.text.white(c, label, p.x, tmp.centerY() + size * 0.36f, size, if (open) Color.WHITE else 0xFFDDE6F5.toInt(),
+            Paint.Align.CENTER, outline = 0.6f)
+    }
+
     /** The player's marker: a pin with the hero's face, over the level to play next. */
     private fun drawPin(c: Canvas) {
         val target = current ?: return
@@ -417,6 +482,7 @@ class WorldMapView(
     private fun hitTest(x: Float, y: Float): Any? {
         if (hypot(x - backBtn.x, y - backBtn.y) < backR * 1.3f) return BACK
         val r = NODE_R * scale * 1.35f
+        world.gate?.let { g -> val p = toView(g.nodeX, g.nodeY); if (hypot(x - p.x, y - p.y) < r) return g }
         return world.levels.minByOrNull { val p = toView(it.nodeX, it.nodeY); hypot(x - p.x, y - p.y) }
             ?.takeIf { val p = toView(it.nodeX, it.nodeY); hypot(x - p.x, y - p.y) < r }
     }
@@ -431,7 +497,11 @@ class WorldMapView(
                 val p = pressed
                 pressed = null
                 if (p != null && p == hit && time > 0.3f) {
-                    if (p == BACK) onBack() else onLevel(p as LevelDef)
+                    when (p) {
+                        BACK -> onBack()
+                        is WorldGate -> onGate(p)
+                        else -> onLevel(p as LevelDef)
+                    }
                 }
             }
             MotionEvent.ACTION_CANCEL -> pressed = null
