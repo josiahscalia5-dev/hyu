@@ -59,8 +59,12 @@ class DeviceEndToEndTest {
                     .firstOrNull { it is MainActivity }
             }
         }
-        val gameView = onMain {
-            activity!!.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as GameView
+        // Level art loads on a background thread behind a loading screen; wait for the game.
+        var gameView: GameView? = null
+        while (gameView == null) {
+            check(SystemClock.uptimeMillis() < deadline) { "level 5 did not finish loading" }
+            SystemClock.sleep(200)
+            gameView = onMain { activity!!.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as? GameView }
         }
         val outDir = File(target.getExternalFilesDir(null), "e2e").apply {
             deleteRecursively()
@@ -72,7 +76,7 @@ class DeviceEndToEndTest {
         val slow = (InstrumentationRegistry.getArguments().getString("slow") ?: "20").toFloat()
 
         val driver = object : Driver {
-            override val view = gameView
+            override val view = gameView!!
             override val background: Bitmap = plate
             private var downTime = 0L
 

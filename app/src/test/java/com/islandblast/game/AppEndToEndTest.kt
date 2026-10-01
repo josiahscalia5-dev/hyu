@@ -43,7 +43,15 @@ class AppEndToEndTest {
         val intent = android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_LEVEL, 5)
         val activity = Robolectric.buildActivity(MainActivity::class.java, intent).setup().get()
-        val gameView = activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0) as GameView
+        // Level art loads on a background thread behind a loading screen; wait for the game.
+        val content = activity.findViewById<ViewGroup>(android.R.id.content)
+        val deadline = System.currentTimeMillis() + 180_000
+        while (content.getChildAt(0) !is GameView) {
+            check(System.currentTimeMillis() < deadline) { "level 5 did not finish loading" }
+            Thread.sleep(20)
+            ShadowLooper.idleMainLooper()
+        }
+        val gameView = content.getChildAt(0) as GameView
         if (gameView.width == 0) {
             gameView.measure(
                 android.view.View.MeasureSpec.makeMeasureSpec(1080, android.view.View.MeasureSpec.EXACTLY),

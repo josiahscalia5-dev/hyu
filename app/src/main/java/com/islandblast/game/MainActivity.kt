@@ -18,6 +18,7 @@ class MainActivity : Activity() {
     private var level5: GameView? = null
     private var level6: StormView? = null
     private var current: View? = null
+    private var loadRequest = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,17 +43,37 @@ class MainActivity : Activity() {
 
     private fun showLevelSelect() {
         stopCurrent()
+        loadRequest++
         show(LevelSelectView(this, assets) { openLevel(it) })
     }
 
+    /**
+     * Shows a loading screen, decodes the level's artwork on a background thread (never on
+     * the UI thread: that froze the app long enough for an ANR), then opens the level.
+     */
     private fun openLevel(level: Int) {
         stopCurrent()
-        val v: View = if (level == 6) {
-            StormView(this, StormAssets(assets)).also { level6 = it; it.start() }
-        } else {
-            GameView(this, Assets(assets)).also { level5 = it; it.start() }
-        }
-        show(v)
+        show(LoadingView(this, assets, level))
+        val request = ++loadRequest
+        Thread {
+            val loaded: Any = try {
+                if (level == 6) StormAssets(assets) else Assets(assets)
+            } catch (e: Throwable) {
+                // Never leave the player stuck on the loading screen: report and go back.
+                android.util.Log.e("IslandBlast", "Loading level $level failed", e)
+                runOnUiThread { if (request == loadRequest) showLevelSelect() }
+                return@Thread
+            }
+            runOnUiThread {
+                if (request != loadRequest || isFinishing) return@runOnUiThread
+                val v: View = if (loaded is StormAssets) {
+                    StormView(this, loaded).also { level6 = it; it.start() }
+                } else {
+                    GameView(this, loaded as Assets).also { level5 = it; it.start() }
+                }
+                show(v)
+            }
+        }.apply { name = "load-level-$level" }.start()
     }
 
     private fun show(v: View) {
