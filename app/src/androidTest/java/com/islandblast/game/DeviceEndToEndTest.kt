@@ -43,6 +43,8 @@ class DeviceEndToEndTest {
     }
 
     private fun <T> onMain(block: () -> T): T {
+        // Re-entrant: checks run on the main thread may read state through onMain too.
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return block()
         var result: Result<T>? = null
         inst.runOnMainSync { result = runCatching(block) }
         return result!!.getOrThrow()

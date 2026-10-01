@@ -37,6 +37,12 @@ interface LevelPlay {
 /** Builds a playable level of one kind of gameplay from its catalog entry. */
 interface LevelKind {
     fun create(context: Context, level: LevelDef): LevelPlay
+
+    /** Decodes the level's art ahead of time (called off the UI thread). */
+    fun preload(context: Context, level: LevelDef) = Unit
+
+    /** True if [create] will not have to decode art first. */
+    fun loaded(level: LevelDef): Boolean = true
 }
 
 /**
@@ -48,34 +54,66 @@ object LevelKinds {
         // Swipe to slice treasure tossed out of the lagoon (Level 4).
         "treasure-slice" to object : LevelKind {
             override fun create(context: Context, level: LevelDef): LevelPlay {
-                val dir = level.dir!!
-                val assets = AssetCache.get("slice:$dir") { SliceAssets(context.assets, dir) }
-                val rules = SliceRules.load(context.assets, dir, level.config)
-                return SliceView(context, assets, rules, level.number, level.name)
+                val rules = SliceRules.load(context.assets, level.dir!!, level.config)
+                return SliceView(context, assets(context, level), rules, level.number, level.name)
             }
+
+            override fun preload(context: Context, level: LevelDef) {
+                assets(context, level)
+            }
+
+            override fun loaded(level: LevelDef) = AssetCache.contains("slice:${level.dir}")
+
+            private fun assets(context: Context, level: LevelDef) =
+                AssetCache.get("slice:${level.dir}") { SliceAssets(context.assets, level.dir!!) }
         },
         // Shoot a colour-shifting ball at blocks (Level 5).
         "color-shift" to object : LevelKind {
-            override fun create(context: Context, level: LevelDef): LevelPlay {
-                val dir = level.dir!!
-                val assets = AssetCache.get("colorshift:$dir") { Assets(context.assets, dir) }
-                return GameView(context, assets)
+            override fun create(context: Context, level: LevelDef): LevelPlay = GameView(context, assets(context, level))
+
+            override fun preload(context: Context, level: LevelDef) {
+                assets(context, level)
             }
+
+            override fun loaded(level: LevelDef) = AssetCache.contains("colorshift:${level.dir}")
+
+            private fun assets(context: Context, level: LevelDef) =
+                AssetCache.get("colorshift:${level.dir}") { Assets(context.assets, level.dir!!) }
         },
     )
 
     fun get(kind: String?): LevelKind? = kind?.let { kinds[it] }
+
+    /** Decodes the art of [levels] on a background thread, so tapping one opens it at once. */
+    fun preload(context: Context, levels: List<LevelDef>) {
+        val app = context.applicationContext
+        Thread {
+            for (l in levels) {
+                if (!l.playable) continue
+                try {
+                    get(l.kind)?.preload(app, l)
+                } catch (e: Exception) {
+                    // Opening the level will load it (and report any problem) instead.
+                }
+            }
+        }.apply { isDaemon = true; name = "level-preload" }.start()
+    }
 
     fun register(kind: String, impl: LevelKind) {
         kinds[kind] = impl
     }
 }
 
-/** Decoded level art, kept while the app runs so replaying a level starts instantly. */
+/**
+ * Decoded art, kept while the app runs so replaying a level starts instantly. Each
+ * entry loads at most once; loading one never blocks reading another.
+ */
 object AssetCache {
-    private val loaded = HashMap<String, Any>()
+    private val loaded = java.util.concurrent.ConcurrentHashMap<String, Lazy<Any>>()
 
     @Suppress("UNCHECKED_CAST")
-    @Synchronized
-    fun <T : Any> get(key: String, load: () -> T): T = loaded.getOrPut(key, load) as T
+    fun <T : Any> get(key: String, load: () -> T): T = loaded.computeIfAbsent(key) { lazy(load) }.value as T
+
+    /** True once [key] has finished loading. */
+    fun contains(key: String): Boolean = loaded[key]?.isInitialized() == true
 }

@@ -21,7 +21,6 @@ import com.islandblast.game.app.Screen
 import com.islandblast.game.levels.AssetCache
 import com.islandblast.game.model.Box
 import com.islandblast.game.ui.UiKit
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -35,7 +34,11 @@ class HomeScreen(private val flow: GameFlow) : Screen {
     }
     override val view: View get() = home
 
-    override fun start() = home.loop.start()
+    override fun start() {
+        home.loop.start()
+        flow.preloadMap()
+    }
+
     override fun stop() = home.loop.stop()
     override fun onBack(): Boolean = false
 }

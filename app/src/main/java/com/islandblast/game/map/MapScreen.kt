@@ -23,6 +23,7 @@ import com.islandblast.game.app.SafeArea
 import com.islandblast.game.app.Screen
 import com.islandblast.game.levels.AssetCache
 import com.islandblast.game.levels.LevelDef
+import com.islandblast.game.levels.LevelKinds
 import com.islandblast.game.levels.Progress
 import com.islandblast.game.levels.WorldDef
 import com.islandblast.game.ui.ButtonStyle
@@ -43,7 +44,11 @@ class MapScreen(private val flow: GameFlow, val world: WorldDef, finished: Level
     }.apply { onBack = { flow.openHome() } }
     override val view: View get() = map
 
-    override fun start() = map.loop.start()
+    override fun start() {
+        map.loop.start()
+        LevelKinds.preload(flow.context, world.levels)
+    }
+
     override fun stop() = map.loop.stop()
 
     override fun onBack(): Boolean {
